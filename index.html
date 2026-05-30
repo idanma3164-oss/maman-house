@@ -1,0 +1,2219 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>🏠 רכישות לבית החדש</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{--bg:#f0f4f8;--card:#fff;--ink:#1a1a2e;--muted:#6b7280;--border:#e5e7eb;--accent:#3b82f6;--green:#10b981;--red:#ef4444;--yellow:#f59e0b;--purple:#8b5cf6;--shadow:0 1px 4px rgba(0,0,0,.1);--nav:64px}
+html,body{height:100%;overflow-x:hidden}
+body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--ink);padding-bottom:calc(var(--nav)+32px)}
+
+/* Header */
+.top-header{background:var(--card);border-bottom:1px solid var(--border);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 1px 6px rgba(0,0,0,.06)}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:#d1d5db;display:inline-block;margin-right:4px;vertical-align:middle}
+.sync-dot.connected{background:var(--green);box-shadow:0 0 5px rgba(16,185,129,.5)}
+.sync-dot.syncing{background:var(--yellow);animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* Bottom Nav */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;height:var(--nav);background:var(--card);border-top:1px solid var(--border);display:flex;z-index:200;box-shadow:0 -2px 10px rgba(0,0,0,.08)}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:.65rem;font-weight:600;color:var(--muted);cursor:pointer;border:none;background:none}
+.nav-btn.active{color:var(--accent)}
+.nav-icon{font-size:1.3rem}
+
+/* Pages */
+.page{display:none;padding:12px;padding-bottom:calc(var(--nav) + 32px)}
+.page.active{display:block}
+
+/* Dashboard */
+.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.dash-card{background:var(--card);border-radius:14px;padding:14px;box-shadow:var(--shadow);border-top:3px solid var(--accent)}
+.dash-card.c-green{border-color:var(--green)}.dash-card.c-red{border-color:var(--red)}.dash-card.c-yellow{border-color:var(--yellow)}.dash-card.c-purple{border-color:var(--purple)}
+.dash-num{font-size:1.15rem;font-weight:900}.dash-label{font-size:.68rem;color:var(--muted);margin-top:3px}
+.pbar{height:6px;background:#e5e7eb;border-radius:3px;margin-top:8px;overflow:hidden}.pbar-fill{height:100%;background:var(--green);border-radius:3px}
+
+/* Filter Bar */
+.filter-bar{background:var(--card);border-radius:14px;padding:10px 12px;margin-bottom:12px;box-shadow:var(--shadow)}
+.filter-row1{display:flex;gap:8px;margin-bottom:8px}
+.filter-row1 input{flex:1;border:1.5px solid var(--border);border-radius:10px;padding:9px 12px;font-family:inherit;font-size:.85rem;color:var(--ink);outline:none;background:var(--bg)}
+.filter-row1 input:focus{border-color:var(--accent);background:#fff}
+.filter-chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:5px 12px;border-radius:20px;font-size:.72rem;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);transition:all .15s;white-space:nowrap}
+.chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip.c-done{}.chip.c-done.active{background:var(--green);border-color:var(--green)}
+.sort-row{display:flex;gap:6px;margin-top:8px;align-items:center}
+.sort-row label{font-size:.72rem;color:var(--muted);font-weight:600;flex-shrink:0}
+.sort-row select{flex:1;border:1.5px solid var(--border);border-radius:10px;padding:7px 10px;font-family:inherit;font-size:.78rem;color:var(--ink);outline:none;background:var(--bg)}
+
+/* Grand Bar */
+.grand-bar{background:var(--ink);color:#fff;border-radius:14px;padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-around}
+.g-item{display:flex;flex-direction:column;align-items:center}
+.g-val{font-size:.95rem;font-weight:900}.g-lbl{font-size:.6rem;opacity:.6;margin-top:2px}
+
+/* Category Cards */
+.cat-card{background:var(--card);border-radius:14px;box-shadow:var(--shadow);margin-bottom:10px;overflow:hidden}
+.cat-header{display:flex;align-items:center;padding:13px 14px;cursor:pointer;gap:10px;border-bottom:2px solid transparent}
+.cat-left{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.cat-emoji{font-size:1.2rem;flex-shrink:0}
+.cat-info{flex:1;min-width:0}
+.cat-name{font-weight:700;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cat-badge{font-size:.65rem;color:var(--muted);margin-top:1px}
+.cat-amounts{text-align:left;flex-shrink:0}
+.cat-total{font-size:.82rem;font-weight:700}
+.cat-remain{font-size:.68rem;color:var(--red)}.cat-remain.zero{color:var(--green)}
+.cat-toggle{color:var(--muted);font-size:.85rem;flex-shrink:0;transition:transform .2s}.cat-toggle.open{transform:rotate(180deg)}
+.cat-body{display:none}.cat-body.open{display:block}
+#catContainer{padding-bottom:8px}
+
+/* Item Rows */
+.item-row{display:flex;align-items:center;padding:11px 14px;border-top:1px solid var(--border);gap:10px}
+.chk{width:22px;height:22px;border:2px solid var(--border);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;background:#fff;flex-shrink:0;font-size:.75rem;font-weight:700;transition:all .15s}
+.chk.on{background:var(--green);border-color:var(--green);color:#fff}
+.item-info{flex:1;min-width:0}
+.item-name{font-size:.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item-name.done{text-decoration:line-through;color:var(--muted)}
+.item-phase{font-size:.63rem;background:#eff6ff;color:#3b82f6;border-radius:8px;padding:1px 5px;font-weight:600;display:inline-block;margin-bottom:2px}
+.item-amounts{text-align:left;flex-shrink:0;font-size:.78rem}
+.item-price{font-weight:700}.item-paid{color:var(--green);font-size:.7rem}.item-remain{font-size:.7rem}
+.item-remain.pos{color:var(--red)}.item-remain.zero{color:var(--green)}.item-remain.neg{color:var(--yellow)}
+.item-actions{display:flex;gap:4px;flex-shrink:0}
+.icon-btn{background:none;border:none;cursor:pointer;padding:5px;border-radius:8px;font-size:.95rem;line-height:1}
+.icon-btn:active{background:var(--bg)}
+.icon-btn.del{color:var(--red)}
+
+/* FAB */
+.add-fab{position:fixed;bottom:calc(var(--nav) + 14px);right:16px;left:auto;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#fff;border:none;font-size:1.6rem;cursor:pointer;box-shadow:0 4px 14px rgba(59,130,246,.5);display:flex;align-items:center;justify-content:center;z-index:150;transition:transform .15s}
+.add-fab:active{transform:scale(.93)}
+
+/* Sheets */
+.sheet-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300}
+.sheet-overlay.open{display:block}
+.sheet{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-radius:20px 20px 0 0;padding:20px 16px 36px;z-index:301;transform:translateY(100%);transition:transform .3s ease;max-height:90vh;overflow-y:auto}
+.sheet.open{transform:translateY(0)}
+.sheet-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px}
+.sheet-title{font-size:1rem;font-weight:700;margin-bottom:16px}
+.form-group{margin-bottom:12px}
+.form-group label{font-size:.78rem;color:var(--muted);display:block;margin-bottom:5px;font-weight:600}
+.form-group input,.form-group select,.form-group textarea{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;font-family:inherit;font-size:.9rem;color:var(--ink);outline:none;background:var(--bg)}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--accent);background:#fff}
+.form-group textarea{height:70px;resize:none}
+.form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.new-cat-row{display:flex;gap:8px;margin-top:6px}
+.new-cat-row input{flex:1;border:1.5px solid var(--border);border-radius:10px;padding:8px 12px;font-family:inherit;font-size:.85rem;color:var(--ink);outline:none;background:var(--bg)}
+.new-cat-row button{padding:8px 14px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-family:inherit;font-size:.82rem;font-weight:700;cursor:pointer;white-space:nowrap}
+.emoji-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.emoji-opt{width:36px;height:36px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.emoji-opt.sel{border-color:var(--accent);background:#eff6ff}
+.btn-save{width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-family:inherit;font-size:.95rem;font-weight:700;cursor:pointer;margin-top:6px}
+.btn-save:active{background:#2563eb}
+.btn-cancel{width:100%;padding:11px;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;font-family:inherit;font-size:.9rem;font-weight:600;cursor:pointer;margin-top:8px;color:var(--muted)}
+
+/* Confirm */
+.confirm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;align-items:flex-end;justify-content:center}
+.confirm-overlay.open{display:flex}
+.confirm-box{background:var(--card);border-radius:20px 20px 0 0;padding:24px 20px 40px;width:100%;max-width:480px}
+.confirm-box h3{font-size:1rem;font-weight:700;margin-bottom:8px}
+.confirm-box p{font-size:.85rem;color:var(--muted);margin-bottom:20px;line-height:1.5}
+.confirm-del{width:100%;padding:13px;background:var(--red);color:#fff;border:none;border-radius:12px;font-family:inherit;font-size:.95rem;font-weight:700;cursor:pointer;margin-bottom:10px}
+.confirm-cancel{width:100%;padding:11px;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;font-family:inherit;font-size:.9rem;font-weight:600;cursor:pointer;color:var(--muted)}
+
+/* Settings */
+.settings-card{background:var(--card);border-radius:14px;padding:16px;box-shadow:var(--shadow);margin-bottom:12px}
+.settings-card h3{font-size:.9rem;font-weight:700;margin-bottom:12px;color:var(--muted)}
+.settings-btn{width:100%;padding:13px;border-radius:12px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;border:none;margin-bottom:8px;display:flex;align-items:center;gap:10px}
+.settings-btn:last-child{margin-bottom:0}
+.settings-btn.excel{background:#217346;color:#fff}
+.settings-btn.ghost{background:var(--bg);border:1.5px solid var(--border);color:var(--ink)}
+
+/* Notes */
+.note-content{font-size:.88rem;color:var(--muted);line-height:1.7;white-space:pre-wrap}
+
+/* Toast */
+.toast{position:fixed;bottom:calc(var(--nav)+80px);left:50%;transform:translateX(-50%);background:#1a1a2e;color:#fff;padding:10px 22px;border-radius:30px;font-size:.82rem;font-weight:600;z-index:500;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+
+/* Loading */
+.loading{text-align:center;padding:60px 20px;color:var(--muted)}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Cat manager list */
+.cat-manage-item{display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px}
+.cat-manage-item:last-child{border-bottom:none}
+.cat-manage-emoji{font-size:1.2rem;width:28px;text-align:center}
+.cat-manage-name{flex:1;font-size:.88rem;font-weight:600}
+.cat-del-btn{background:none;border:none;cursor:pointer;color:var(--red);font-size:.9rem;padding:4px 8px;border-radius:8px}
+
+/* ── Tasks ── */
+.task-phase-block{background:var(--card);border-radius:14px;box-shadow:var(--shadow);margin-bottom:12px;overflow:hidden}
+.task-phase-header{display:flex;align-items:center;padding:13px 14px;cursor:pointer;gap:10px;border-bottom:3px solid transparent}
+.task-phase-left{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.task-phase-emoji{font-size:1.2rem;flex-shrink:0}
+.task-phase-info{flex:1;min-width:0}
+.task-phase-name{font-weight:700;font-size:.9rem}
+.task-phase-sub{font-size:.65rem;color:var(--muted);margin-top:1px}
+.task-phase-right{text-align:left;flex-shrink:0}
+.task-phase-pct{font-size:.85rem;font-weight:700}
+.task-phase-count{font-size:.65rem;color:var(--muted)}
+.task-phase-pbar{height:4px;background:#e5e7eb;border-radius:2px;margin-top:4px;overflow:hidden;width:60px}
+.task-phase-pbar-fill{height:100%;border-radius:2px}
+.task-phase-toggle{color:var(--muted);font-size:.85rem;flex-shrink:0;transition:transform .2s}
+.task-phase-toggle.open{transform:rotate(180deg)}
+.task-phase-body{display:none}.task-phase-body.open{display:block}
+.task-row{display:flex;align-items:flex-start;padding:11px 14px;border-top:1px solid var(--border);gap:10px}
+.task-chk{width:22px;height:22px;border:2px solid var(--border);border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;background:#fff;flex-shrink:0;font-size:.7rem;font-weight:700;transition:all .15s;margin-top:1px}
+.task-chk.on{background:var(--green);border-color:var(--green);color:#fff}
+.task-info{flex:1;min-width:0}
+.task-name{font-size:.85rem;font-weight:600;line-height:1.3}
+.task-name.done{text-decoration:line-through;color:var(--muted)}
+.task-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;align-items:center}
+.task-badge{font-size:.62rem;padding:2px 7px;border-radius:10px;font-weight:600;white-space:nowrap}
+.badge-high{background:#fee2e2;color:#dc2626}
+.badge-med{background:#fef9c3;color:#92400e}
+.badge-low{background:#dcfce7;color:#16a34a}
+.badge-owner{background:#eff6ff;color:#3b82f6}
+.badge-date{background:#f3f4f6;color:var(--muted)}
+.badge-overdue{background:#fee2e2;color:#dc2626}
+.task-actions{display:flex;gap:4px;flex-shrink:0}
+.task-add-btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:10px;border-top:1px solid var(--border);font-family:inherit;font-size:.82rem;font-weight:600;color:var(--accent);background:none;border-left:none;border-right:none;border-bottom:none;cursor:pointer}
+.task-add-btn:active{background:var(--bg)}
+.tasks-dash-card{background:var(--card);border-radius:14px;padding:14px;box-shadow:var(--shadow);text-align:center}
+.tasks-dash-num{font-size:1.3rem;font-weight:900}
+.tasks-dash-lbl{font-size:.68rem;color:var(--muted);margin-top:3px}
+
+
+.k-unit{border:1.5px solid var(--border);border-radius:8px;cursor:pointer;text-align:center;padding:5px 3px;transition:all .15s;background:var(--card);position:relative;flex:1;min-width:0}
+.k-unit:hover{border-color:#3b82f6;background:#eff6ff}
+.k-unit.k-selected{border-color:#3b82f6;background:#eff6ff;border-width:2px}
+.k-unit.k-mgira{border-top:3px solid #3b82f6}
+.k-unit.k-madaf{border-top:3px solid #10b981}
+.k-unit.k-other{border-top:3px solid #9b59b6}
+.k-num{font-size:13px;font-weight:700;color:var(--ink)}
+.k-type{font-size:9px;color:var(--muted);margin-top:1px}
+.k-cnt{font-size:10px;font-weight:600;color:#3b82f6;margin-top:2px}
+.k-item-row{display:flex;align-items:center;padding:9px 10px;border-bottom:0.5px solid var(--border);gap:8px}
+.k-item-row:last-child{border-bottom:none}
+.k-item-name{flex:1;font-size:.85rem;color:var(--ink);font-weight:500}
+.k-item-cat{font-size:.68rem;color:var(--muted)}
+.k-cat-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+</style>
+</head>
+<body>
+
+<div class="top-header">
+  <div>
+    <div style="font-size:1.05rem;font-weight:900">🏠 רכישות לבית החדש</div>
+    <div style="font-size:.7rem;color:var(--muted)" id="syncLabel"><span class="sync-dot" id="syncDot"></span>מתחבר...</div>
+  </div>
+  <div style="font-size:.78rem;color:var(--muted)" id="headerStats"></div>
+</div>
+
+<!-- Pages -->
+<div class="page active" id="page-home">
+  <div id="loadingScreen" class="loading"><div class="spinner"></div><div>מתחבר...</div></div>
+  <div id="appContent" style="display:none">
+    <div class="dash-grid" id="dashboard"></div>
+    <div class="grand-bar" id="grandTotal"></div>
+
+    <div class="filter-bar">
+      <div class="filter-row1">
+        <input type="text" id="srch" placeholder="🔍 חיפוש פריט..." oninput="renderAll()">
+      </div>
+      <div class="filter-chips" id="phaseChips">
+        <div class="chip active" data-phase="" onclick="setPhase(this,'')">הכל</div>
+        <div class="chip" data-phase="1" onclick="setPhase(this,'1')">שלב 1</div>
+        <div class="chip" data-phase="2" onclick="setPhase(this,'2')">שלב 2</div>
+        <div class="chip" data-phase="3" onclick="setPhase(this,'3')">שלב 3</div>
+        <div class="chip" data-phase="4" onclick="setPhase(this,'4')">שלב 4</div>
+        <div class="chip c-done" data-status="" onclick="toggleStatus(this)">⏳ ממתין</div>
+        <div class="chip c-done" data-status="done" onclick="toggleStatus(this)">✅ הושלם</div>
+      </div>
+      <div class="sort-row">
+        <label>מיון:</label>
+        <select id="sortBy" onchange="renderAll()">
+          <option value="default">ברירת מחדל</option>
+          <option value="price_desc">מחיר — גבוה לנמוך</option>
+          <option value="price_asc">מחיר — נמוך לגבוה</option>
+          <option value="remain_desc">נותר — גבוה לנמוך</option>
+          <option value="alpha">א-ב</option>
+          <option value="phase">לפי שלב</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button onclick="expandAll()" style="flex:1;padding:7px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);font-family:inherit;font-size:.78rem;font-weight:600;cursor:pointer;color:var(--muted)">📂 פתח הכל</button>
+        <button onclick="collapseAll()" style="flex:1;padding:7px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);font-family:inherit;font-size:.78rem;font-weight:600;cursor:pointer;color:var(--muted)">📁 סגור הכל</button>
+      </div>
+    </div>
+
+    <div id="catContainer"></div>
+  </div>
+</div>
+
+<div class="page" id="page-settings">
+  <div class="settings-card">
+    <h3>ייצוא</h3>
+    <button class="settings-btn excel" onclick="exportExcel()">📊 ייצוא הוצאות ל-Excel</button>
+    <button class="settings-btn" style="background:#217346;color:#fff;width:100%;padding:13px;border-radius:12px;font-family:inherit;font-size:.9rem;font-weight:700;cursor:pointer;border:none;display:flex;align-items:center;gap:10px" onclick="exportKitchenExcel()">🍳 ייצוא מטבח ל-Excel</button>
+  </div>
+  <div class="settings-card">
+    <h3>ניהול קטגוריות</h3>
+    <button class="settings-btn ghost" onclick="openCatManager()">🏷️ הוסף / מחק קטגוריות</button>
+  </div>
+  <div class="settings-card">
+    <h3>מידע וחיבור</h3>
+    <div style="font-size:.85rem;color:var(--muted);line-height:1.9">
+      <div>🔗 מסונכרן ל-Firebase בזמן אמת</div>
+      <div>👥 שניכם עורכים אותו מסד נתונים</div>
+      <div>📱 עובד על כל מכשיר ודפדפן</div>
+      <div id="itemCount" style="margin-top:6px;font-weight:700;color:var(--ink)"></div>
+    </div>
+    <button onclick="testFirebaseConnection()" style="margin-top:10px;width:100%;padding:10px;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:.82rem;cursor:pointer;font-weight:600">🔍 בדוק חיבור Firebase</button>
+    <div id="firebase-test-result" style="margin-top:8px;font-size:.8rem;color:var(--muted);text-align:center"></div>
+    <div style="margin-top:8px;font-size:.75rem;color:var(--muted);line-height:1.6;padding:8px;background:var(--bg);border-radius:8px">
+      ⚠️ אם אין שמירה — Firebase Rules אולי פגו.<br>
+      עבור ל-Firebase → Realtime Database → Rules<br>
+      ושנה ל: <code style="font-size:.72rem">.read: true, .write: true</code>
+    </div>
+  </div>
+</div>
+
+
+<div class="page" id="page-tasks">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <div style="font-size:1rem;font-weight:900">✅ משימות</div>
+    <button onclick="exportTasksExcel()" style="padding:7px 14px;background:#217346;color:#fff;border:none;border-radius:10px;font-family:inherit;font-size:.78rem;font-weight:700;cursor:pointer">📊 ייצוא Excel</button>
+  </div>
+  <div id="tasks-dashboard" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px"></div>
+  <div id="urgent-tasks-block" style="margin-bottom:12px"></div>
+  <div id="tasks-container"></div>
+</div>
+
+<div class="page" id="page-kitchen">
+  <div id="kitchen-loading" style="text-align:center;padding:40px;color:var(--muted)">מתחבר...</div>
+  <div id="kitchen-app" style="display:none">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-size:1rem;font-weight:900">🍳 מפת המטבח</div>
+      <div style="display:flex;gap:6px">
+        <button onclick="exportKitchenExcel()" style="padding:6px 12px;background:#217346;color:#fff;border:none;border-radius:10px;font-family:inherit;font-size:.75rem;font-weight:700;cursor:pointer">📊 Excel</button>
+        <button onclick="openKitchenAddItem(null,null)" style="padding:6px 12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-family:inherit;font-size:.78rem;font-weight:700;cursor:pointer">+ הוסף</button>
+      </div>
+    </div>
+
+    <!-- חיפוש מוצר -->
+    <div style="position:relative;margin-bottom:10px">
+      <input type="text" id="kitchen-search" placeholder="🔍 חפש מוצר במטבח..." oninput="kitchenSearch(this.value)"
+        style="width:100%;padding:9px 36px 9px 12px;border:1.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:.85rem;background:var(--card);color:var(--ink);outline:none">
+      <button onclick="document.getElementById('kitchen-search').value='';kitchenSearch('')" 
+        style="position:absolute;left:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:2px">✕</button>
+    </div>
+    <div id="kitchen-search-results" style="display:none;background:var(--card);border:1.5px solid var(--border);border-radius:10px;margin-bottom:10px;max-height:220px;overflow-y:auto"></div>
+
+    <!-- מקרא -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;font-size:11px">
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:#c8e6c9;border:1px solid #81c784;border-radius:2px;display:inline-block"></span>מדף</span>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:#bbdefb;border:1px solid #64b5f6;border-radius:2px;display:inline-block"></span>מגירה</span>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:#ffe0b2;border:1px solid #ffb74d;border-radius:2px;display:inline-block"></span>מגירה נמוכה</span>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:#fff9c4;border:1px solid #fff176;border-radius:2px;display:inline-block"></span>מגירה עמוקה</span>
+      <span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:#ffcdd2;border:1px solid #e57373;border-radius:2px;display:inline-block"></span>כיריים/אי</span>
+    </div>
+
+    <!-- תוכנית קומה -->
+    <div style="background:var(--card);border-radius:14px;padding:12px;margin-bottom:12px;box-shadow:var(--shadow);overflow-x:auto">
+      <div id="kitchen-plan"></div>
+    </div>
+
+    <!-- פאנל פירוט -->
+    <div id="kitchen-detail" style="background:var(--card);border-radius:14px;padding:14px;box-shadow:var(--shadow);min-height:100px">
+      <div style="text-align:center;color:var(--muted);font-size:14px;padding:16px">לחץ על יחידה לצפייה ועריכה</div>
+    </div>
+
+  </div>
+</div>
+<div class="bottom-nav">
+  <button class="nav-btn active" id="nav-home" onclick="switchPage('home')"><span class="nav-icon">🏠</span>הוצאות</button>
+  <button class="nav-btn" id="nav-tasks" onclick="switchPage('tasks')"><span class="nav-icon">✅</span>משימות</button>
+  <button class="nav-btn" id="nav-kitchen" onclick="switchPage('kitchen')"><span class="nav-icon">🍳</span>מטבח</button>
+  <button class="nav-btn" id="nav-settings" onclick="switchPage('settings')"><span class="nav-icon">⚙️</span>הגדרות</button>
+</div>
+
+<button class="add-fab" onclick="openItemSheet(null)" id="addFab">＋</button>
+
+<!-- Add/Edit Item Sheet -->
+<div class="sheet-overlay" id="itemOverlay" onclick="closeItemSheet()"></div>
+<div class="sheet" id="itemSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title" id="itemSheetTitle">➕ פריט חדש</div>
+  <div class="form-group">
+    <label>תיאור *</label>
+    <input type="text" id="af-desc" placeholder="למשל: ארון מטבח">
+  </div>
+  <div class="form-row-2">
+    <div class="form-group"><label>מחיר ₪</label><input type="number" id="af-price" placeholder="0"></div>
+    <div class="form-group"><label>שולם ₪</label><input type="number" id="af-paid" placeholder="0"></div>
+  </div>
+  <div class="form-group">
+    <label>קטגוריה</label>
+    <select id="af-cat"></select>
+  </div>
+  <div class="form-row-2">
+    <div class="form-group">
+      <label>שלב</label>
+      <select id="af-phase">
+        <option value="1">שלב 1 — חתימה</option>
+        <option value="2">שלב 2 — בנייה</option>
+        <option value="3" selected>שלב 3 — לפני מסירה</option>
+        <option value="4">שלב 4 — אחרי מסירה</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>סטטוס</label>
+      <select id="af-done"><option value="0">⏳ ממתין</option><option value="1">✅ הושלם</option></select>
+    </div>
+  </div>
+  <div class="form-group"><label>הערות</label><textarea id="af-notes" placeholder="אופציונלי..."></textarea></div>
+  <div class="form-group"><label>🔗 קישור מסמך / קבלה</label><input type="url" id="af-link" placeholder="הדבק קישור מ-Google Drive..."></div>
+  <button class="btn-save" id="itemSaveBtn" onclick="saveItem()">שמור פריט</button>
+  <button class="btn-cancel" onclick="closeItemSheet()">ביטול</button>
+</div>
+
+<!-- Category Manager Sheet -->
+<div class="sheet-overlay" id="catMgrOverlay" onclick="closeCatManager()"></div>
+<div class="sheet" id="catMgrSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">🏷️ ניהול קטגוריות</div>
+  <div class="form-group">
+    <label>הוסף קטגוריה חדשה</label>
+    <div class="new-cat-row">
+      <input type="text" id="newCatName" placeholder="שם הקטגוריה...">
+      <button onclick="addNewCat()">הוסף</button>
+    </div>
+    <div style="margin-top:10px">
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:6px;font-weight:600">בחר אייקון:</div>
+      <div class="emoji-row" id="emojiPicker">
+        <div class="emoji-opt sel" data-emoji="📋">📋</div>
+        <div class="emoji-opt" data-emoji="🛏️">🛏️</div>
+        <div class="emoji-opt" data-emoji="🪑">🪑</div>
+        <div class="emoji-opt" data-emoji="🖼️">🖼️</div>
+        <div class="emoji-opt" data-emoji="🪴">🪴</div>
+        <div class="emoji-opt" data-emoji="🔩">🔩</div>
+        <div class="emoji-opt" data-emoji="🧱">🧱</div>
+        <div class="emoji-opt" data-emoji="💧">💧</div>
+        <div class="emoji-opt" data-emoji="🌿">🌿</div>
+        <div class="emoji-opt" data-emoji="🎨">🎨</div>
+        <div class="emoji-opt" data-emoji="📦">📦</div>
+        <div class="emoji-opt" data-emoji="🔑">🔑</div>
+        <div class="emoji-opt" data-emoji="🏊">🏊</div>
+        <div class="emoji-opt" data-emoji="🚗">🚗</div>
+        <div class="emoji-opt" data-emoji="💡">💡</div>
+        <div class="emoji-opt" data-emoji="🪟">🪟</div>
+      </div>
+    </div>
+  </div>
+  <div style="font-size:.78rem;color:var(--muted);font-weight:600;margin-bottom:8px">קטגוריות קיימות:</div>
+  <div id="catManageList"></div>
+  <button class="btn-cancel" onclick="closeCatManager()" style="margin-top:14px">סגור</button>
+</div>
+
+<!-- Notes Sheet -->
+<div class="sheet-overlay" id="notesOverlay" onclick="closeNotesSheet()"></div>
+<div class="sheet" id="notesSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title" id="notesTitle"></div>
+  <div class="note-content" id="notesContent"></div>
+  <button class="btn-cancel" onclick="closeNotesSheet()" style="margin-top:16px">סגור</button>
+</div>
+
+<!-- Confirm Delete -->
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-box">
+    <h3>🗑️ מחיקת פריט</h3>
+    <p id="confirmText"></p>
+    <button class="confirm-del" onclick="confirmDelete()">כן, מחק</button>
+    <button class="confirm-cancel" onclick="closeConfirm()">ביטול</button>
+  </div>
+</div>
+
+
+<!-- Add Task Sheet -->
+<div class="sheet-overlay" id="taskOverlay" onclick="closeTaskSheet()"></div>
+<div class="sheet" id="taskSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title" id="taskSheetTitle">✅ משימה חדשה</div>
+  <div class="form-group"><label>תיאור *</label><input type="text" id="tf-desc" placeholder="למשל: לבחור ריצוף"></div>
+  <div class="form-group">
+    <label>שלב</label>
+    <select id="tf-phase">
+      <option value="1">שלב 1 — חתימה וסגירה</option>
+      <option value="2">שלב 2 — בנייה ושינויים</option>
+      <option value="3" selected>שלב 3 — לפני מסירה</option>
+      <option value="4">שלב 4 — אחרי מסירה</option>
+    </select>
+  </div>
+  <div class="form-row-2">
+    <div class="form-group"><label>תאריך יעד</label><input type="date" id="tf-date"></div>
+    <div class="form-group">
+      <label>אחראי</label>
+      <select id="tf-owner">
+        <option value="שניכם">👫 שניכם</option>
+        <option value="עידן">👨 עידן</option>
+        <option value="אשתי">👩 אשתי</option>
+      </select>
+    </div>
+  </div>
+  <div class="form-group">
+    <label>עדיפות</label>
+    <select id="tf-priority">
+      <option value="high">🔴 גבוהה</option>
+      <option value="med" selected>🟡 בינונית</option>
+      <option value="low">🟢 נמוכה</option>
+    </select>
+  </div>
+  <div class="form-group"><label>הערות</label><textarea id="tf-notes" placeholder="אופציונלי..."></textarea></div>
+  <div class="form-group"><label>🔗 קישור מסמך / תמונה</label><input type="url" id="tf-link" placeholder="הדבק קישור מ-Google Drive..."></div>
+  <button class="btn-save" id="taskSaveBtn" onclick="saveTask()">שמור משימה</button>
+  <button class="btn-cancel" onclick="closeTaskSheet()">ביטול</button>
+</div>
+
+<!-- Confirm Delete Task -->
+<div class="confirm-overlay" id="confirmTaskOverlay">
+  <div class="confirm-box">
+    <h3>🗑️ מחיקת משימה</h3>
+    <p id="confirmTaskText"></p>
+    <button class="confirm-del" onclick="confirmDeleteTask()">כן, מחק</button>
+    <button class="confirm-cancel" onclick="closeConfirmTask()">ביטול</button>
+  </div>
+</div>
+
+
+<!-- Kitchen Item Sheet -->
+<div class="sheet-overlay" id="kItemOverlay" onclick="closeKitchenItemSheet()"></div>
+<div class="sheet" id="kItemSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title" id="kItemTitle">פריט מטבח</div>
+  <div class="form-group"><label>שם פריט *</label><input type="text" id="ki-name" placeholder="למשל: סירים"></div>
+  <div class="form-group">
+    <label>קטגוריה</label>
+    <select id="ki-cat">
+      <option>בישול</option><option>הגשה</option><option>כוסות</option>
+      <option>קפה/סוכר/תה</option><option>תבלינים</option><option>מוצרי חשמל</option>
+      <option>חד פעמי</option><option>חומרי ניקוי</option><option>קופסאות ואחסון</option>
+      <option>מגבות</option><option>בקבוקים</option><option>דברי קודש לשבת</option>
+      <option>סכומון</option><option>מזון יבש</option><option>אחר</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label>מיקום (ארון/מגירה/מדף)</label>
+    <select id="ki-loc">
+      <option value="מזווה">מזווה</option><option value="קלפה">קלפה</option>
+      <option value="שיש">שיש</option>
+      <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+      <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+      <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+      <option value="10">10</option><option value="11">11</option><option value="12">12</option>
+      <option value="13">13</option><option value="14">14</option><option value="15">15</option>
+      <option value="16">16</option><option value="17">17</option><option value="18+19">18+19</option>
+      <option value="20">20</option><option value="21">21</option><option value="22">22</option>
+      <option value="23">23</option><option value="24">24</option><option value="25">25</option>
+    </select>
+  </div>
+  <div class="form-group"><label>הערות</label><textarea id="ki-notes" placeholder="אופציונלי..." style="height:60px"></textarea></div>
+  <button class="btn-save" id="kItemSaveBtn" onclick="saveKitchenItem()">שמור</button>
+  <button class="btn-cancel" onclick="closeKitchenItemSheet()">ביטול</button>
+</div>
+
+<!-- Kitchen Delete Confirm -->
+<div class="confirm-overlay" id="kConfirmOverlay">
+  <div class="confirm-box">
+    <h3>🗑️ מחיקת פריט</h3>
+    <p id="kConfirmText"></p>
+    <button class="confirm-del" onclick="confirmDeleteKitchenItem()">כן, מחק</button>
+    <button class="confirm-cancel" onclick="closeKitchenConfirm()">ביטול</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// Debug: בדוק chk elements אחרי render
+function debugChk() {
+  const chks = document.querySelectorAll('.chk');
+  console.log('[DEBUG] chk elements found:', chks.length);
+  if(chks.length > 0) {
+    const first = chks[0];
+    const rect = first.getBoundingClientRect();
+    console.log('[DEBUG] first chk rect:', JSON.stringify({top:rect.top,left:rect.left,w:rect.width,h:rect.height}));
+    console.log('[DEBUG] first chk visible:', rect.width > 0 && rect.height > 0);
+    // בדוק element מעל
+    const el = document.elementFromPoint(rect.left + rect.width/2, rect.top + rect.height/2);
+    console.log('[DEBUG] element at chk position:', el ? el.tagName+'.'+el.className.substring(0,30) : 'none');
+  }
+  const catBodies = document.querySelectorAll('.cat-body');
+  const openBodies = document.querySelectorAll('.cat-body.open');
+  console.log('[DEBUG] cat-body total:', catBodies.length, '| open:', openBodies.length);
+}
+setTimeout(debugChk, 2000);
+
+window.onerror = function(msg, src, line, col, err) {
+  console.error('[GLOBAL ERROR]', msg, 'line:', line, 'col:', col);
+  return false;
+};
+window.onunhandledrejection = function(e) {
+  console.error('[UNHANDLED PROMISE]', e.reason);
+};
+const firebaseConfig = { databaseURL: "https://maman-house-default-rtdb.firebaseio.com" };
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const refData = db.ref('expenses');
+const refCats = db.ref('customCats');
+
+const PHASE_LABELS = {1:'שלב 1 — חתימת חוזה',2:'שלב 2 — בנייה',3:'שלב 3 — לפני מסירה',4:'שלב 4 — אחרי מסירה'};
+
+const BASE_CAT_META = {"מטבח":{"emoji":"🍳","color":"#e8763a"},"מיזוג אוויר":{"emoji":"❄️","color":"#4a9cc7"},"מדד":{"emoji":"📊","color":"#9b59b6"},"ריהוט":{"emoji":"🛋️","color":"#27ae60"},"עורכי דין":{"emoji":"⚖️","color":"#2c3e50"},"משכנתא":{"emoji":"🏦","color":"#16a085"},"נגרות":{"emoji":"🪚","color":"#8e6c3d"},"דלתות":{"emoji":"🚪","color":"#7f8c8d"},"גבס":{"emoji":"🏗️","color":"#95a5a6"},"מוצרי חשמל":{"emoji":"⚡","color":"#f39c12"},"שינוי דיירים":{"emoji":"🔧","color":"#e74c3c"},"אנשי מקצוע":{"emoji":"👷","color":"#d35400"},"כללי":{"emoji":"📋","color":"#7f8c8d"},"ריצוף":{"emoji":"🪨","color":"#a9795d"},"רשתות":{"emoji":"🪟","color":"#5dade2"},"תאורה":{"emoji":"💡","color":"#e6c619"},"הלוואת קבלן":{"emoji":"💰","color":"#1abc9c"},"בטיחות":{"emoji":"🛡️","color":"#e74c3c"},"חתימת חוזה":{"emoji":"✍️","color":"#2980b9"},"מקלחת":{"emoji":"🚿","color":"#5dade2"},"תוספות ושדרוגים":{"emoji":"✨","color":"#8e44ad"}};
+const EXTRA_COLORS = ["#6366f1","#ec4899","#14b8a6","#f97316","#84cc16","#06b6d4","#a855f7","#ef4444","#0ea5e9","#d946ef"];
+
+let CAT_META = Object.assign({}, BASE_CAT_META);
+let CUSTOM_CATS = {};
+
+const DEFAULT_DATA = [{"desc":"מטבח","price":79000,"paid":15800,"cat":"מטבח","phase":3,"notes":"","done":false},{"desc":"מזגן מיני מרכזי INV","price":24000,"paid":0,"cat":"מיזוג אוויר","phase":3,"notes":"הערכה, לבדוק מזגן עם קרר HFO","done":false},{"desc":"מדד תשומות בניה","price":22800,"paid":0,"cat":"מדד","phase":3,"notes":"הערכה של 6% עליה","done":false},{"desc":"שיש מטבח","price":21750,"paid":0,"cat":"מטבח","phase":3,"notes":"לבדוק אורך שיש לתמחור\nשיש פורצלן","done":false},{"desc":"חדר שינה הורים","price":10000,"paid":0,"cat":"ריהוט","phase":3,"notes":"1.מסגרת מיטה\n2.מזרן חדש\n3.מראה\n4.שידות ליד המיטה","done":false},{"desc":"עו\"ד - קבלן","price":6808,"paid":6808,"cat":"עורכי דין","phase":1,"notes":"5770 + מעמ","done":true},{"desc":"יועץ משכנתאות","price":6000,"paid":0,"cat":"משכנתא","phase":3,"notes":"","done":false},{"desc":"ארון בגדים הורים","price":6000,"paid":0,"cat":"נגרות","phase":3,"notes":"הערכה לפי קנית ארון רגיל","done":false},{"desc":"סלון","price":6000,"paid":0,"cat":"ריהוט","phase":3,"notes":"","done":false},{"desc":"שדרוג דלתות - חמדיה","price":4130,"paid":4130,"cat":"דלתות","phase":2,"notes":"3 דלתות חלקות + צבע בתנור","done":true},{"desc":"עבודות גבס","price":5000,"paid":0,"cat":"גבס","phase":3,"notes":"גבס במטבח סלון מקלחת וחדר הורים","done":false},{"desc":"עו\"ד - פרטי","price":5000,"paid":5000,"cat":"עורכי דין","phase":1,"notes":"נופר חלמיש - לא מומלץ!","done":true},{"desc":"טלוויזיה לסלון","price":4000,"paid":0,"cat":"מוצרי חשמל","phase":3,"notes":"75 אינץ 4K","done":false},{"desc":"מערכת סאונד לסלון","price":4000,"paid":0,"cat":"מוצרי חשמל","phase":3,"notes":"בדיקה על רמקולים שקועים בגבס","done":false},{"desc":"כיסאות בר לאי","price":4000,"paid":0,"cat":"מטבח","phase":3,"notes":"","done":false},{"desc":"תשלום שינוי דיירים","price":-1825,"paid":0,"cat":"שינוי דיירים","phase":4,"notes":"לאחר 8% הנחה - 9,325 ₪","done":false},{"desc":"תוספת בית תקע אותו מעגל","price":483.8,"paid":0,"cat":"שינוי דיירים","phase":4,"notes":"484 ₪ לנקודה","done":false},{"desc":"מדיח כלים אינטגרלי","price":3500,"paid":0,"cat":"מוצרי חשמל","phase":3,"notes":"","done":false},{"desc":"תנור אינגרלי","price":3500,"paid":0,"cat":"מוצרי חשמל","phase":3,"notes":"לעדכן מחיר","done":false},{"desc":"ווילונות סלון וחדרים","price":3500,"paid":0,"cat":"ריהוט","phase":4,"notes":"","done":false},{"desc":"עמלת פתיחת תיק משכנתא","price":3400,"paid":0,"cat":"משכנתא","phase":3,"notes":"רבע אחוז מסכום המשכנתא","done":false},{"desc":"מזגן עילי 1 כ\"ס - x3","price":3300,"paid":0,"cat":"מיזוג אוויר","phase":3,"notes":"","done":false},{"desc":"בדק בית הנדסי","price":3000,"paid":0,"cat":"אנשי מקצוע","phase":3,"notes":"לבדוק לפני מסירת הדירה","done":false},{"desc":"חיבורים חשמל + גז + מים","price":3000,"paid":0,"cat":"כללי","phase":3,"notes":"לברר עלויות חיבור ומונים","done":false},{"desc":"מיקרוגל אינטגרלי","price":3000,"paid":0,"cat":"מוצרי חשמל","phase":3,"notes":"לעדכן מחיר","done":false},{"desc":"התקנת מזגנים x3","price":3000,"paid":0,"cat":"מיזוג אוויר","phase":3,"notes":"הערכה","done":false},{"desc":"ארון בגדים גאיה","price":3000,"paid":0,"cat":"נגרות","phase":3,"notes":"ארון איקאה","done":false},{"desc":"ארון בגדים חדר נוסף","price":3000,"paid":0,"cat":"נגרות","phase":3,"notes":"","done":false},{"desc":"תוספת מפסק מצליב","price":1534,"paid":0,"cat":"שינוי דיירים","phase":4,"notes":"384 ₪ לנקודה","done":false},{"desc":"הובלת דירה","price":2000,"paid":0,"cat":"כללי","phase":3,"notes":"","done":false},{"desc":"כיריים אינדוקציה","price":3000,"paid":0,"cat":"מוצרי חשמל","phase":3,"notes":"","done":false},{"desc":"שבירת אדנית + ריצוף","price":2000,"paid":0,"cat":"ריצוף","phase":4,"notes":"הערכת מחיר - רק עבודה","done":false},{"desc":"הכנת רשת מרפסת","price":2000,"paid":0,"cat":"רשתות","phase":4,"notes":"","done":false},{"desc":"פינת ישיבה מרפסת","price":1500,"paid":0,"cat":"ריהוט","phase":4,"notes":"","done":false},{"desc":"שולחן לסלון","price":1500,"paid":0,"cat":"ריהוט","phase":3,"notes":"","done":false},{"desc":"מזנון","price":1500,"paid":0,"cat":"ריהוט","phase":3,"notes":"","done":false},{"desc":"מאוורר תקרה חדר ילדים","price":1500,"paid":0,"cat":"תאורה","phase":3,"notes":"2 מאווררים","done":false},{"desc":"שינוי נק' כיור מטבח","price":1150.5,"paid":0,"cat":"שינוי דיירים","phase":4,"notes":"1150 ₪ לנקודה","done":false},{"desc":"שינוי נק' גז","price":1073.8,"paid":0,"cat":"שינוי דיירים","phase":4,"notes":"537 ₪ לנקודה","done":false},{"desc":"ביטוח חיים הלוואת קבלן","price":990,"paid":990,"cat":"הלוואת קבלן","phase":2,"notes":"15 ₪ שני + 18 ₪ עידן","done":true},{"desc":"ריצוף אקסטרה למרפסת","price":1280,"paid":1280,"cat":"ריצוף","phase":2,"notes":"12 מ\"ר","done":true},{"desc":"פתיחת תיק משכנתא","price":360,"paid":360,"cat":"הלוואת קבלן","phase":1,"notes":"בנק הפועלים 11.6.25","done":true},{"desc":"הכנת רשת חדר שרות","price":350,"paid":0,"cat":"רשתות","phase":4,"notes":"","done":false},{"desc":"ייפויי כח נוטריוני - חוזה","price":316,"paid":316,"cat":"עורכי דין","phase":1,"notes":"","done":true},{"desc":"ייפויי כח נוטריוני - הלוואה","price":316,"paid":316,"cat":"עורכי דין","phase":1,"notes":"עו\"ד מינה ביליה","done":true},{"desc":"תנורים למקלחות","price":300,"paid":0,"cat":"מוצרי חשמל","phase":3,"notes":"","done":false},{"desc":"משכון הלוואת קבלן","price":209,"paid":209,"cat":"הלוואת קבלן","phase":1,"notes":"11.6.25","done":true},{"desc":"רישום דירה בטאבו","price":0,"paid":0,"cat":"אנשי מקצוע","phase":4,"notes":"500 ₪ לחדר + מעמ","done":false},{"desc":"סורגים שקופים","price":0,"paid":0,"cat":"בטיחות","phase":4,"notes":"סוגר הקסם","done":false},{"desc":"הגבהת מעקה מרפסת","price":0,"paid":0,"cat":"בטיחות","phase":4,"notes":"","done":false},{"desc":"תוספת נק' מחשב","price":967.6,"paid":0,"cat":"שינוי דיירים","phase":4,"notes":"484 ₪ לנקודה","done":false},{"desc":"זיכוי מזגן 5 כ\"ס","price":-5000,"paid":0,"cat":"מיזוג אוויר","phase":3,"notes":"זיכוי / מכירת המזגן","done":false},{"desc":"זיכוי מטבח קבלן","price":-5200,"paid":0,"cat":"מטבח","phase":3,"notes":"רלוונטי אם לא עושים באביבי","done":false},{"desc":"הזזת נק' ספרינקלר","price":536.9,"paid":0,"cat":"שינוי דיירים","phase":4,"notes":"החלטת יועץ ספרינקלרים","done":false},{"desc":"אביזר מוגן מים לשקע","price":300.9,"paid":0,"cat":"שינוי דיירים","phase":4,"notes":"","done":false},{"desc":"בית תקע מעגל נפרד","price":3540,"paid":0,"cat":"שינוי דיירים","phase":4,"notes":"708 ₪ לנקודה","done":false},{"desc":"ביטול דלת חדר שירות","price":-500,"paid":0,"cat":"דלתות","phase":2,"notes":"","done":false},{"desc":"מקרר קו אפס","price":0,"paid":0,"cat":"מוצרי חשמל","phase":3,"notes":"12000 - דוד וענת?","done":false},{"desc":"מחמם מים גז","price":0,"paid":0,"cat":"מוצרי חשמל","phase":4,"notes":"","done":false},{"desc":"טוחן אשפה","price":0,"paid":0,"cat":"מטבח","phase":3,"notes":"","done":false},{"desc":"ברז לכיור","price":0,"paid":0,"cat":"מטבח","phase":3,"notes":"סטנדרט מהקבלן שחור","done":true},{"desc":"כיור מטבח","price":0,"paid":0,"cat":"מטבח","phase":3,"notes":"לבדוק אצל אלוני","done":true},{"desc":"מקלחון אמבטיה","price":0,"paid":0,"cat":"מקלחת","phase":4,"notes":"","done":false},{"desc":"מקלחון חדר הורים","price":0,"paid":0,"cat":"מקלחת","phase":4,"notes":"","done":false},{"desc":"ארון חדר שירות","price":0,"paid":0,"cat":"נגרות","phase":3,"notes":"","done":false},{"desc":"פינת אוכל קונסולה","price":0,"paid":0,"cat":"ריהוט","phase":4,"notes":"5000 - דוד וענת?","done":false},{"desc":"חיפוי קיר טלוויזיה","price":0,"paid":0,"cat":"ריהוט","phase":3,"notes":"","done":false},{"desc":"ארונות ילדים","price":0,"paid":0,"cat":"נגרות","phase":3,"notes":"","done":false},{"desc":"שדרוג מטבח","price":null,"paid":0,"cat":"מטבח","phase":2,"notes":"לשבת עם המעצבת ולקבל הצעת מחיר","done":false}];
+
+let DATA = [];
+let localChange = false;
+let isConnected = false;
+let pendingDeleteIdx = null;
+let editingIdx = null;
+let activePhase = '';
+let activeStatus = '';
+const catOpen = {};
+
+// ── Firebase ──────────────────────────────────────────────────────────
+function setSyncStatus(s,l){
+  const dot = document.getElementById('syncDot');
+  const lbl = document.getElementById('syncLabel');
+  if(dot) dot.className='sync-dot '+s;
+  if(lbl) lbl.innerHTML='<span class="sync-dot '+s+'"></span>'+l;
+}
+
+refCats.on('value', snap => {
+  CUSTOM_CATS = snap.val() || {};
+  Object.entries(CUSTOM_CATS).forEach(([name,meta]) => { CAT_META[name] = meta; });
+  refreshCatDropdown();
+  renderCatManageList();
+});
+
+console.log('[Firebase] connecting to:', firebaseConfig.databaseURL);
+refData.once('value').then(snap => {
+  const val = snap.val();
+  if (!val || !Array.isArray(val) || val.length === 0) {
+    refData.set(DEFAULT_DATA).then(() => { DATA = JSON.parse(JSON.stringify(DEFAULT_DATA)); startListening(); });
+  } else { DATA = val; startListening(); }
+}).catch(() => { DATA = JSON.parse(JSON.stringify(DEFAULT_DATA)); showApp(); setSyncStatus('','שגיאת חיבור'); });
+
+function startListening() {
+  console.log('[Firebase] startListening called');
+  refData.on('value', snap => {
+    const val = snap.val();
+    console.log('[Firebase] data received, type:', typeof val, 'isArray:', Array.isArray(val), 'len:', val ? (Array.isArray(val)?val.length:'?') : 'null');
+    if (val && Array.isArray(val)) {
+      DATA = val;
+      if (!isConnected) { isConnected = true; showApp(); return; }
+      setSyncStatus('connected','מסונכרן ✓');
+      const wasLocal = localChange;
+      localChange = false;
+      if (!wasLocal) { renderAll(); }
+    }
+  }, err => {
+    console.error('[Firebase] listener ERROR:', err.code, err.message);
+    setSyncStatus('', 'שגיאת Firebase: '+err.message);
+    showToast('❌ '+err.message);
+  });
+}
+
+function showApp() {
+  document.getElementById('addFab').style.display = 'flex';
+  document.getElementById('loadingScreen').style.display = 'none';
+  document.getElementById('appContent').style.display = 'block';
+  refreshCatDropdown();
+  renderAll();
+  // Event delegation על catContainer — עובד גם אחרי innerHTML reset
+  document.getElementById('catContainer').addEventListener('click', function(ev) {
+    const chkEl = ev.target.closest('.chk');
+    if (!chkEl) return;
+    ev.stopPropagation();
+    const row = chkEl.closest('.item-row');
+    if (!row) return;
+    const idx = parseInt(row.getAttribute('data-idx'));
+    if (isNaN(idx)) return;
+    console.log('[DELEGATION] chk clicked, idx:', idx);
+    DATA[idx].done = !DATA[idx].done;
+    pushData();
+  });
+}
+
+function pushData() {
+  localChange = true;
+  try { setSyncStatus('syncing','שומר...'); } catch(e){}
+  console.log('[Firebase] pushData called, DATA length:', DATA ? DATA.length : 'null');
+  if(!DATA || !Array.isArray(DATA)) { console.error('[Firebase] DATA invalid!'); return; }
+  refData.set(DATA)
+    .then(() => {
+      console.log('[Firebase] pushData SUCCESS');
+      try { setSyncStatus('connected','נשמר ✓'); } catch(e){}
+    })
+    .catch(err => {
+      console.error('[Firebase] pushData FAILED:', err.code, err.message);
+      localChange = false;
+      try { setSyncStatus('','שגיאה'); } catch(e){}
+      alert('שגיאת Firebase: ' + err.message + ' | code: ' + err.code);
+    });
+}
+
+// ── Categories ────────────────────────────────────────────────────────
+function getAllCatNames() {
+  const fromData = [...new Set(DATA.map(i => i.cat))];
+  const fromMeta = Object.keys(CAT_META);
+  return [...new Set([...fromData, ...fromMeta])];
+}
+
+function refreshCatDropdown() {
+  const sel = document.getElementById('af-cat');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '';
+  getAllCatNames().forEach(c => {
+    const o = document.createElement('option');
+    o.value = c;
+    o.textContent = (CAT_META[c]?.emoji || '📋') + '  ' + c;
+    sel.appendChild(o);
+  });
+  if (prev) sel.value = prev;
+}
+
+function openCatManager() { document.getElementById('catMgrOverlay').classList.add('open'); document.getElementById('catMgrSheet').classList.add('open'); renderCatManageList(); }
+function closeCatManager() { document.getElementById('catMgrOverlay').classList.remove('open'); document.getElementById('catMgrSheet').classList.remove('open'); }
+
+let selectedEmoji = '📋';
+document.querySelectorAll('.emoji-opt').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.emoji-opt').forEach(e => e.classList.remove('sel'));
+    el.classList.add('sel');
+    selectedEmoji = el.dataset.emoji;
+  });
+});
+
+function addNewCat() {
+  const name = document.getElementById('newCatName').value.trim();
+  if (!name) { showToast('⚠️ הכנס שם קטגוריה'); return; }
+  if (CAT_META[name]) { showToast('קטגוריה זו כבר קיימת'); return; }
+  const colorIdx = Object.keys(CUSTOM_CATS).length % EXTRA_COLORS.length;
+  const meta = { emoji: selectedEmoji, color: EXTRA_COLORS[colorIdx] };
+  CUSTOM_CATS[name] = meta;
+  CAT_META[name] = meta;
+  refCats.set(CUSTOM_CATS);
+  document.getElementById('newCatName').value = '';
+  refreshCatDropdown();
+  renderCatManageList();
+  showToast('✅ קטגוריה "' + name + '" נוספה');
+}
+
+function deleteCat(name) {
+  if (DATA.some(i => i.cat === name)) { showToast('⚠️ לא ניתן למחוק — יש פריטים בקטגוריה זו'); return; }
+  if (!CUSTOM_CATS[name]) { showToast('לא ניתן למחוק קטגוריות מובנות'); return; }
+  delete CUSTOM_CATS[name];
+  delete CAT_META[name];
+  refCats.set(CUSTOM_CATS);
+  refreshCatDropdown();
+  renderCatManageList();
+  showToast('🗑️ קטגוריה נמחקה');
+}
+
+function renderCatManageList() {
+  const list = document.getElementById('catManageList');
+  if (!list) return;
+  const all = getAllCatNames();
+  list.innerHTML = all.map(c => {
+    const meta = CAT_META[c] || { emoji: '📋', color: '#6b7280' };
+    const isCustom = !!CUSTOM_CATS[c];
+    const count = DATA.filter(i => i.cat === c).length;
+    return '<div class="cat-manage-item">'
+      + '<span class="cat-manage-emoji">' + meta.emoji + '</span>'
+      + '<span class="cat-manage-name" style="color:' + meta.color + '">' + c + '</span>'
+      + '<span style="font-size:.7rem;color:var(--muted)">' + count + ' פריטים</span>'
+      + (isCustom ? '<button class="cat-del-btn" onclick="deleteCat(\'' + c.replace(/'/g, "\\'") + '\')">🗑️</button>' : '<span style="font-size:.68rem;color:var(--muted);padding:4px 8px">מובנת</span>')
+      + '</div>';
+  }).join('');
+}
+
+// ── Item Sheet (Add/Edit) ─────────────────────────────────────────────
+function openItemSheet(idx) {
+  editingIdx = idx;
+  const isEdit = idx !== null;
+  document.getElementById('itemSheetTitle').textContent = isEdit ? '✏️ עריכת פריט' : '➕ פריט חדש';
+  document.getElementById('itemSaveBtn').textContent = isEdit ? 'שמור שינויים' : 'שמור פריט';
+  if (isEdit) {
+    const it = DATA[idx];
+    document.getElementById('af-desc').value = it.desc || '';
+    document.getElementById('af-price').value = it.price || '';
+    document.getElementById('af-paid').value = it.paid || '';
+    document.getElementById('af-cat').value = it.cat || '';
+    document.getElementById('af-phase').value = it.phase || 3;
+    document.getElementById('af-done').value = it.done ? '1' : '0';
+    document.getElementById('af-notes').value = it.notes || '';
+    document.getElementById('af-link').value = it.link || '';
+  } else {
+    ['af-desc','af-price','af-paid','af-notes'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('af-phase').value = '3';
+    document.getElementById('af-done').value = '0';
+  }
+  document.getElementById('itemOverlay').classList.add('open');
+  document.getElementById('itemSheet').classList.add('open');
+  setTimeout(() => document.getElementById('af-desc').focus(), 350);
+}
+
+function closeItemSheet() {
+  document.getElementById('itemOverlay').classList.remove('open');
+  document.getElementById('itemSheet').classList.remove('open');
+  editingIdx = null;
+}
+
+function saveItem() {
+  const desc = document.getElementById('af-desc').value.trim();
+  if (!desc) { showToast('⚠️ חובה להכניס תיאור'); return; }
+  const price = parseFloat(document.getElementById('af-price').value) || 0;
+  const paid = parseFloat(document.getElementById('af-paid').value) || 0;
+  const cat = document.getElementById('af-cat').value;
+  const phase = parseInt(document.getElementById('af-phase').value);
+  const done = document.getElementById('af-done').value === '1';
+  const notes = document.getElementById('af-notes').value.trim();
+  const link = document.getElementById('af-link').value.trim();
+  const item = { desc, price, paid, cat, phase, notes, link, done };
+  if (editingIdx !== null) {
+    DATA[editingIdx] = Object.assign(DATA[editingIdx], item);
+    showToast('✏️ פריט עודכן');
+  } else {
+    DATA.push(item);
+    showToast('✅ פריט נוסף');
+  }
+  pushData();
+  closeItemSheet();
+}
+
+// ── Delete ────────────────────────────────────────────────────────────
+function askDelete(idx) {
+  pendingDeleteIdx = idx;
+  document.getElementById('confirmText').textContent = 'האם למחוק את הפריט "' + DATA[idx].desc + '"? פעולה זו אינה הפיכה.';
+  document.getElementById('confirmOverlay').classList.add('open');
+}
+function closeConfirm() { document.getElementById('confirmOverlay').classList.remove('open'); pendingDeleteIdx = null; }
+function confirmDelete() {
+  if (pendingDeleteIdx === null) return;
+  const name = DATA[pendingDeleteIdx].desc;
+  DATA.splice(pendingDeleteIdx, 1);
+  pushData();
+  closeConfirm();
+  showToast('🗑️ "' + name + '" נמחק');
+}
+
+// ── Notes ─────────────────────────────────────────────────────────────
+function openNotesSheet(idx) {
+  const it = DATA[idx];
+  document.getElementById('notesTitle').textContent = it.desc;
+  let body = it.notes || '(אין הערות)';
+  if (it.phase) body += '\n\n📅 ' + (PHASE_LABELS[it.phase] || 'שלב ' + it.phase);
+  document.getElementById('notesContent').textContent = body;
+  document.getElementById('notesOverlay').classList.add('open');
+  document.getElementById('notesSheet').classList.add('open');
+}
+function closeNotesSheet() { document.getElementById('notesOverlay').classList.remove('open'); document.getElementById('notesSheet').classList.remove('open'); }
+
+// ── Filter & Sort ─────────────────────────────────────────────────────
+function setPhase(el, phase) {
+  document.querySelectorAll('[data-phase]').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  activePhase = phase;
+  renderAll();
+}
+
+function toggleStatus(el) {
+  const val = el.dataset.status;
+  if (activeStatus === val) { activeStatus = ''; el.classList.remove('active'); }
+  else {
+    document.querySelectorAll('[data-status]').forEach(c => c.classList.remove('active'));
+    activeStatus = val; el.classList.add('active');
+  }
+  renderAll();
+}
+
+function getFiltered() {
+  const srchEl = document.getElementById('srch');
+  const sortEl = document.getElementById('sortBy');
+  const search = srchEl ? srchEl.value.toLowerCase() : '';
+  const sort = sortEl ? sortEl.value : 'default';
+  let arr = DATA.map((it, i) => Object.assign({}, it, { _idx: i })).filter(it => {
+    if (search && !it.desc.toLowerCase().includes(search)) return false;
+    if (activePhase && String(it.phase) !== activePhase) return false;
+    if (activeStatus === 'done' && !it.done) return false;
+    if (activeStatus === '' && activeStatus !== '' && it.done) return false;
+    return true;
+  });
+  if (sort === 'price_desc') arr.sort((a,b) => (b.price||0)-(a.price||0));
+  else if (sort === 'price_asc') arr.sort((a,b) => (a.price||0)-(b.price||0));
+  else if (sort === 'remain_desc') arr.sort((a,b) => ((b.price||0)-(b.paid||0))-((a.price||0)-(a.paid||0)));
+  else if (sort === 'alpha') arr.sort((a,b) => a.desc.localeCompare(b.desc, 'he'));
+  else if (sort === 'phase') arr.sort((a,b) => (a.phase||0)-(b.phase||0));
+  return arr;
+}
+
+// ── Render ────────────────────────────────────────────────────────────
+function fmtK(n){if(n===null||n===undefined||n==='')return'—';const abs=Math.abs(n);const s=abs>=10000?Math.round(abs/1000)+'K':Math.round(abs).toLocaleString('he-IL');return(n<0?'−':'')+s+'₪';}
+function fmtFull(n){if(n===null||n===undefined)return'—';return Math.round(n).toLocaleString('he-IL')+'₪';}
+function remClass(r){return r>0?'pos':r<0?'neg':'zero';}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+
+function renderDashboard() {
+  const total=DATA.reduce((s,i)=>s+(i.price||0),0);
+  const paid=DATA.reduce((s,i)=>s+(i.paid||0),0);
+  const rem=total-paid;
+  const pct=total>0?Math.round(paid/total*100):0;
+  const done=DATA.filter(i=>i.done).length;
+  document.getElementById('dashboard').innerHTML=
+    '<div class="dash-card c-purple"><div class="dash-num">'+fmtK(total)+'</div><div class="dash-label">סה"כ תקציב</div></div>'
+    +'<div class="dash-card c-green"><div class="dash-num">'+fmtK(paid)+'</div><div class="dash-label">שולם</div><div class="pbar"><div class="pbar-fill" style="width:'+pct+'%"></div></div></div>'
+    +'<div class="dash-card c-red"><div class="dash-num">'+fmtK(rem)+'</div><div class="dash-label">נותר לתשלום</div></div>'
+    +'<div class="dash-card c-yellow"><div class="dash-num">'+done+'/'+DATA.length+'</div><div class="dash-label">פריטים הושלמו</div></div>';
+  document.getElementById('headerStats').textContent=pct+'% שולם';
+  document.getElementById('itemCount').textContent='סה"כ '+DATA.length+' פריטים ב-'+[...new Set(DATA.map(i=>i.cat))].length+' קטגוריות';
+}
+
+function renderGrand(filtered) {
+  const total=filtered.reduce((s,i)=>s+(i.price||0),0);
+  const paid=filtered.reduce((s,i)=>s+(i.paid||0),0);
+  const rem=total-paid;
+  document.getElementById('grandTotal').innerHTML=
+    '<div class="g-item"><div class="g-val">'+fmtK(total)+'</div><div class="g-lbl">תקציב</div></div>'
+    +'<div class="g-item"><div class="g-val" style="color:#6ee7b7">'+fmtK(paid)+'</div><div class="g-lbl">שולם</div></div>'
+    +'<div class="g-item"><div class="g-val" style="color:#fca5a5">'+fmtK(rem)+'</div><div class="g-lbl">נותר</div></div>'
+    +'<div class="g-item"><div class="g-val">'+filtered.length+'</div><div class="g-lbl">פריטים</div></div>';
+}
+
+function renderCategories(filtered) {
+  const grouped = {};
+  filtered.forEach(it => { if (!grouped[it.cat]) grouped[it.cat] = []; grouped[it.cat].push(it); });
+  const container = document.getElementById('catContainer');
+  container.innerHTML = '';
+  Object.entries(grouped).forEach(([cat, items]) => {
+    const meta = CAT_META[cat] || { emoji: '📋', color: '#6b7280' };
+    const catTotal = items.reduce((s,i)=>s+(i.price||0),0);
+    const catPaid = items.reduce((s,i)=>s+(i.paid||0),0);
+    const catRem = catTotal - catPaid;
+    const doneCount = items.filter(i=>i.done).length;
+    if (catOpen[cat] === undefined) catOpen[cat] = true;
+    const isOpen = catOpen[cat];
+    const card = document.createElement('div'); card.className = 'cat-card';
+    const hdr = document.createElement('div'); hdr.className = 'cat-header'; hdr.style.borderBottomColor = isOpen ? meta.color : 'transparent';
+    hdr.innerHTML = '<div class="cat-left"><span class="cat-emoji">'+meta.emoji+'</span>'
+      +'<div class="cat-info"><div class="cat-name" style="color:'+meta.color+'">'+cat+'</div>'
+      +'<div class="cat-badge">'+doneCount+'/'+items.length+' הושלמו</div></div></div>'
+      +'<div class="cat-amounts"><div class="cat-total">'+fmtK(catTotal)+'</div>'
+      +'<div class="cat-remain'+(catRem<=0?' zero':'')+'">נותר '+fmtK(catRem)+'</div></div>'
+      +'<span class="cat-toggle'+(isOpen?' open':'')+'">▾</span>';
+    hdr.addEventListener('click', () => { catOpen[cat] = !catOpen[cat]; renderAll(); });
+    const body = document.createElement('div'); body.className = 'cat-body' + (isOpen ? ' open' : '');
+    items.forEach(it => {
+      const idx = it._idx;
+      const rem = (it.price||0) - (it.paid||0);
+      const row = document.createElement('div'); row.className = 'item-row'; row.setAttribute('data-idx', idx);
+      if(it.done) row.style.opacity='0.5';
+      const chk = document.createElement('div'); chk.className = 'chk' + (it.done ? ' on' : ''); chk.textContent = it.done ? '✓' : '';
+      chk.addEventListener('click', e => {
+        e.stopPropagation();
+        DATA[idx].done = !DATA[idx].done;
+        console.log('[CHK] toggled idx', idx, 'done=', DATA[idx].done);
+        pushData();
+      });
+      const info = document.createElement('div'); info.className = 'item-info';
+      const ph = document.createElement('div'); ph.className = 'item-phase'; ph.textContent = 'שלב ' + (it.phase||'?');
+      const nm = document.createElement('div'); nm.className = 'item-name' + (it.done ? ' done' : ''); nm.textContent = it.desc;
+      info.appendChild(ph); info.appendChild(nm);
+      const amounts = document.createElement('div'); amounts.className = 'item-amounts';
+      amounts.innerHTML = '<div class="item-price">'+fmtK(it.price)+'</div>'
+        +'<div class="item-paid">שולם '+fmtK(it.paid)+'</div>'
+        +'<div class="item-remain '+remClass(rem)+'">נותר '+fmtK(rem)+'</div>';
+      const actions = document.createElement('div'); actions.className = 'item-actions';
+      if (it.notes) {
+        const nb = document.createElement('button'); nb.className = 'icon-btn'; nb.textContent = '💬';
+        nb.addEventListener('click', e => { e.stopPropagation(); openNotesSheet(idx); }); actions.appendChild(nb);
+      }
+      if (it.link) {
+        const lb = document.createElement('a'); lb.className='icon-btn'; lb.textContent='🔗';
+        lb.href=it.link; lb.target='_blank'; lb.title='פתח מסמך';
+        lb.style.textDecoration='none'; lb.addEventListener('click',e=>e.stopPropagation()); actions.appendChild(lb);
+      }
+      const eb = document.createElement('button'); eb.className = 'icon-btn'; eb.textContent = '✏️';
+      eb.addEventListener('click', e => { e.stopPropagation(); openItemSheet(idx); }); actions.appendChild(eb);
+      const delBtn = document.createElement('button'); delBtn.className = 'icon-btn del'; delBtn.textContent = '🗑️';
+      delBtn.addEventListener('click', e => { e.stopPropagation(); askDelete(idx); }); actions.appendChild(delBtn);
+      row.appendChild(chk); row.appendChild(info); row.appendChild(amounts); row.appendChild(actions);
+      body.appendChild(row);
+    });
+    card.appendChild(hdr); card.appendChild(body); container.appendChild(card);
+  });
+}
+
+function exportExcel() {
+  const wb = XLSX.utils.book_new();
+
+  // ── גיליון 1: פירוט הוצאות — לפי מבנה קיים ──
+  // עמודות: תיאור | מחיר | שולם | נותר לתשלום | קטגוריה | שלב | הערות | שינוי דיירים | קישורים
+  const header = ['תיאור','מחיר ₪','שולם ₪','נותר לתשלום ₪','קטגוריה','שלב','הערות','שינוי דיירים','קישורים'];
+  const rows = [header];
+
+  const PHASE_NAMES = {1:'שלב 1 — חתימה',2:'שלב 2 — בנייה',3:'שלב 3 — לפני מסירה',4:'שלב 4 — אחרי מסירה'};
+  const SHINOUY_CATS = ['שינוי דיירים','תוספות ושדרוגים'];
+
+  DATA.forEach(it => {
+    const rem = (it.price||0) - (it.paid||0);
+    const phaseName = PHASE_NAMES[it.phase] || (it.phase ? 'שלב '+it.phase : '');
+    const isShinouy = SHINOUY_CATS.includes(it.cat) ? 'כן' : '';
+    rows.push([
+      it.desc || '',
+      it.price || 0,
+      it.paid || 0,
+      rem,
+      it.cat || '',
+      phaseName,
+      it.notes || '',
+      isShinouy,
+      it.link || '',
+    ]);
+  });
+
+  // שורת סיכום
+  const totalPrice = DATA.reduce((s,i)=>s+(i.price||0),0);
+  const totalPaid  = DATA.reduce((s,i)=>s+(i.paid||0),0);
+  rows.push(['סה"כ', Math.round(totalPrice), Math.round(totalPaid), Math.round(totalPrice-totalPaid),'','','','','']);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:35},{wch:14},{wch:14},{wch:18},{wch:18},{wch:22},{wch:40},{wch:14},{wch:35}];
+
+  // עיצוב: כותרת סגול
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for(let c=range.s.c; c<=range.e.c; c++){
+    const cell = ws[XLSX.utils.encode_cell({r:0,c})];
+    if(cell) cell.s = {fill:{fgColor:{rgb:'7B2FBE'}},font:{color:{rgb:'FFFFFF'},bold:true},alignment:{horizontal:'center'}};
+  }
+
+  // עיצוב: שורת סיכום
+  const lastRow = rows.length-1;
+  for(let c=0; c<4; c++){
+    const cell = ws[XLSX.utils.encode_cell({r:lastRow,c})];
+    if(cell) cell.s = {fill:{fgColor:{rgb:'EDE7F6'}},font:{bold:true}};
+  }
+
+  XLSX.utils.book_append_sheet(wb, ws, 'פירוט הוצאות');
+
+  // ── גיליון 2: סיכום לפי קטגוריה ──
+  const cats = {};
+  DATA.forEach(it=>{ if(!cats[it.cat])cats[it.cat]={total:0,paid:0,count:0}; cats[it.cat].total+=(it.price||0); cats[it.cat].paid+=(it.paid||0); cats[it.cat].count++; });
+  const sumRows = [['קטגוריה','מספר פריטים','תקציב ₪','שולם ₪','נותר ₪','% שולם']];
+  Object.entries(cats).sort((a,b)=>b[1].total-a[1].total).forEach(([c,v])=>{
+    const pct = v.total>0?Math.round(v.paid/v.total*100):0;
+    sumRows.push([c, v.count, Math.round(v.total), Math.round(v.paid), Math.round(v.total-v.paid), pct+'%']);
+  });
+  const totT = DATA.reduce((s,i)=>s+(i.price||0),0);
+  const totP = DATA.reduce((s,i)=>s+(i.paid||0),0);
+  sumRows.push(['סה"כ', DATA.length, Math.round(totT), Math.round(totP), Math.round(totT-totP), totT>0?Math.round(totP/totT*100)+'%':'0%']);
+  const ws2 = XLSX.utils.aoa_to_sheet(sumRows);
+  ws2['!cols'] = [{wch:20},{wch:14},{wch:14},{wch:14},{wch:14},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'סיכום קטגוריות');
+
+  // ── גיליון 3: שינוי דיירים בלבד ──
+  const sRows = [['תיאור','מחיר ₪','שולם ₪','נותר ₪','הערות']];
+  DATA.filter(it=>SHINOUY_CATS.includes(it.cat)).forEach(it=>{
+    const rem=(it.price||0)-(it.paid||0);
+    sRows.push([it.desc||'',it.price||0,it.paid||0,rem,it.notes||'']);
+  });
+  const ws3 = XLSX.utils.aoa_to_sheet(sRows);
+  ws3['!cols'] = [{wch:35},{wch:12},{wch:12},{wch:12},{wch:40}];
+  XLSX.utils.book_append_sheet(wb, ws3, 'שינוי דיירים');
+
+  const d = new Date();
+  XLSX.writeFile(wb, 'הוצאות_דירה_'+d.getDate()+'-'+(d.getMonth()+1)+'-'+d.getFullYear()+'.xlsx');
+  showToast('📊 Excel יוצא בהצלחה!');
+}
+
+function switchPage(id) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  document.getElementById('nav-'+id).classList.add('active');
+  document.getElementById('addFab').style.display = id==='home' ? 'flex' : 'none';
+  if (id==='tasks') renderTasks();
+  if (id==='kitchen' && kitchenConnected) { renderKitchenPlan(); if(selectedKUnit) selectKUnit(selectedKUnit); }
+}
+
+function expandAll(){Object.keys(catOpen).forEach(c=>catOpen[c]=true);renderAll();showToast('📂 כל הקטגוריות פתוחות');}
+function collapseAll(){Object.keys(catOpen).forEach(c=>catOpen[c]=false);renderAll();showToast('📁 כל הקטגוריות סגורות');}
+// ══════════════════════════════════════════════
+// KITCHEN PLAN — תוכנית קומה מדויקת
+// ══════════════════════════════════════════════
+
+// צבעים לפי סוג
+const K_COLORS = {
+  madaf:  {bg:'#c8e6c9', border:'#81c784', text:'#1b5e20'},  // ירוק = מדף
+  mgira:  {bg:'#bbdefb', border:'#64b5f6', text:'#0d47a1'},  // כחול = מגירה
+  namuch: {bg:'#ffe0b2', border:'#ffb74d', text:'#e65100'},  // כתום = מגירה נמוכה
+  amuka:  {bg:'#fff9c4', border:'#fff176', text:'#f57f17'},  // צהוב = מגירה עמוקה
+  kiriyim:{bg:'#ffcdd2', border:'#e57373', text:'#b71c1c'},  // אדום = כיריים
+  kiyyor: {bg:'#e8eaf6', border:'#9fa8da', text:'#1a237e'},  // סגול = כיור/מדיח
+  vitra:  {bg:'#e0f7fa', border:'#4dd0e1', text:'#006064'},  // ציאן = ויטרינה
+  other:  {bg:'#f5f5f5', border:'#bdbdbd', text:'#424242'},  // אפור = אחר
+};
+
+// הגדרת יחידות — תוכנית קומה מלמעלה
+// כל יחידה: id, label, type, width(cm), rows (מה יש בתוכה מלמעלה למטה)
+const KITCHEN_LAYOUT = {
+  // ─── ארונות עליונים (מדפים) ───
+  upper: [
+    {id:'mz1', label:'מזווה 1', type:'madaf', w:70, slots:[
+      {id:'1', label:'1', type:'madaf', sub:'מדף'},
+      {id:'8', label:'8', type:'madaf', sub:'מדף'},
+      {id:'mgz1a', label:'1', type:'mgira', sub:'מגירה'},
+      {id:'mgz1b', label:'2', type:'mgira', sub:'מגירה'},
+      {id:'mgz1c', label:'3', type:'mgira', sub:'מגירה'},
+      {id:'mgz1d', label:'4H', type:'namuch', sub:'מגירה נמוכה'},
+    ]},
+    {id:'mz2', label:'מזווה 2', type:'madaf', w:70, slots:[
+      {id:'2', label:'2', type:'madaf', sub:'מדף'},
+      {id:'9', label:'9', type:'madaf', sub:'מדף'},
+      {id:'mgz2a', label:'5', type:'mgira', sub:'מגירה'},
+      {id:'mgz2b', label:'6', type:'mgira', sub:'מגירה'},
+      {id:'mgz2c', label:'7', type:'mgira', sub:'מגירה'},
+      {id:'mgz2d', label:'8H', type:'namuch', sub:'מגירה נמוכה'},
+    ]},
+    {id:'vit', label:'ויטרינה', type:'vitra', w:25, slots:[
+      {id:'5', label:'5', type:'vitra', sub:'מדף'},
+      {id:'12', label:'12', type:'vitra', sub:'מדף'},
+      {id:'mgv1', label:'15', type:'mgira', sub:'מגירה'},
+      {id:'mgv2', label:'16', type:'mgira', sub:'מגירה'},
+      {id:'mgv3', label:'17', type:'mgira', sub:'מגירה'},
+      {id:'mgv4', label:'18', type:'namuch', sub:'מגירה נמוכה'},
+    ]},
+    {id:'mkr3', label:'מקרר', type:'madaf', w:60, slots:[
+      {id:'3', label:'3', type:'madaf', sub:'מדף'},
+      {id:'10', label:'10', type:'madaf', sub:'מדף'},
+    ]},
+    {id:'mkr4', label:'מקרר', type:'madaf', w:60, slots:[
+      {id:'4', label:'4', type:'madaf', sub:'מדף'},
+      {id:'11', label:'11', type:'madaf', sub:'מדף'},
+    ]},
+    {id:'dlt', label:'דלת מעבר', type:'other', w:80, slots:[
+      {id:'6', label:'6', type:'madaf', sub:'מדף'},
+      {id:'13', label:'13', type:'madaf', sub:'מדף'},
+      {id:'klafa', label:'קלפה', type:'other', sub:'קלפה'},
+    ]},
+    {id:'bld', label:'בילד אין', type:'madaf', w:60, slots:[
+      {id:'7', label:'7', type:'madaf', sub:'מדף'},
+      {id:'14', label:'14', type:'madaf', sub:'מדף'},
+    ]},
+  ],
+
+  // ─── ארונות תחתונים ───
+  lower: [
+    {id:'mzvh', label:'מזווה', type:'other', w:60, slots:[
+      {id:'mzvhx', label:'מזווה', type:'other', sub:'אחסון'},
+    ]},
+    {id:'kiyyor', label:'כיור', type:'kiyyor', w:80, slots:[
+      {id:'23', label:'23', type:'kiyyor', sub:'ארון כיור'},
+    ]},
+    {id:'madiach', label:'מדיח', type:'kiyyor', w:60, slots:[
+      {id:'madiachx', label:'מדיח', type:'kiyyor', sub:'מדיח'},
+    ]},
+    // אי כיריים — 3 סטים של מגירות
+    {id:'ai', label:'כיריים / אי', type:'kiriyim', w:270, isAi:true, slots:[
+      // סט שמאל 16-17
+      {id:'ai_l', label:'16\n17', type:'mgira', sub:'מגירות', w:90, rows:[
+        {id:'16', label:'16', type:'mgira'},{id:'17', label:'17', type:'mgira'},
+      ]},
+      // מרכז = כיריים 18-19
+      {id:'ai_m', label:'כיריים\n18-19', type:'kiriyim', sub:'כיריים', w:90, rows:[
+        {id:'18', label:'18', type:'kiriyim'},{id:'19', label:'19', type:'kiriyim'},
+      ]},
+      // ימין 20-21
+      {id:'ai_r', label:'20\n21', type:'mgira', sub:'מגירות', w:90, rows:[
+        {id:'20', label:'20', type:'mgira'},{id:'21', label:'21', type:'mgira'},
+      ]},
+    ]},
+    {id:'tav', label:'תבלינים', type:'amuka', w:40, slots:[
+      {id:'tava', label:'תבלינים', type:'amuka', sub:'מגירה'},
+    ]},
+    {id:'sech25', label:'סכומון', type:'mgira', w:80, slots:[
+      {id:'22', label:'22', type:'namuch', sub:'מגבות'},
+      {id:'25', label:'25', type:'mgira', sub:'סכומון'},
+      {id:'sech25b', label:'14-15', type:'amuka', sub:'מגירה עמוקה'},
+    ]},
+    {id:'col1012', label:'עמודה', type:'mgira', w:80, slots:[
+      {id:'col10', label:'10-11', type:'mgira', sub:'מגירות'},
+      {id:'col12', label:'12-13', type:'mgira', sub:'מגירות'},
+    ]},
+  ]
+};
+
+// מיפוי id → unit לחיפוש מהיר
+const ALL_UNITS_MAP = {};
+function buildMap(units){ units.forEach(u=>{ ALL_UNITS_MAP[u.id]=u; if(u.slots) buildMap(u.slots); if(u.rows) buildMap(u.rows); }); }
+buildMap(KITCHEN_LAYOUT.upper);
+buildMap(KITCHEN_LAYOUT.lower);
+
+function kCell(unit, clickId, extraStyle=''){
+  const c = K_COLORS[unit.type] || K_COLORS.other;
+  const isSelected = selectedKUnit === clickId;
+  const items = getKItems(clickId);
+  const cnt = items.length;
+  return `<div onclick="selectKUnit('${clickId}')"
+    style="background:${c.bg};border:${isSelected?'2.5px':'1px'} solid ${isSelected?'#1a237e':c.border};
+    border-radius:4px;cursor:pointer;text-align:center;padding:4px 2px;
+    transition:all .15s;min-height:36px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;${extraStyle}">
+    <div style="font-size:11px;font-weight:700;color:${c.text};line-height:1.2">${unit.label}</div>
+    ${cnt>0?`<div style="font-size:9px;background:${c.border};color:${c.text};border-radius:8px;padding:1px 5px;margin-top:2px;font-weight:600">${cnt}</div>`:''}
+  </div>`;
+}
+
+function renderKitchenPlan(){
+  const container = document.getElementById('kitchen-plan');
+  if(!container) return;
+
+  const C = {
+    madaf:  ['#c8e6c9','#81c784','#1b5e20'],
+    mgira:  ['#bbdefb','#64b5f6','#0d47a1'],
+    mgiraH: ['#1565c0','#0d47a1','#e3f2fd'],
+    sechum: ['#ffe0b2','#ffb74d','#e65100'],
+    amuka:  ['#fff9c4','#f9a825','#e65100'],
+    kiriym: ['#ffcdd2','#e57373','#b71c1c'],
+    kiyyor: ['#e1f5fe','#81d4fa','#006064'],
+    micro:  ['#ede7f6','#b39ddb','#4a148c'],
+    other:  ['#f5f5f5','#bdbdbd','#424242'],
+    vitra:  ['#c8e6c9','#81c784','#1b5e20'],
+  };
+
+  function u(id,lbl,sub,type,minH){
+    const cnt = getKItems(id).length;
+    const isSel = selectedKUnit === id;
+    const badge = cnt>0?'<div style="font-size:7px;background:rgba(0,0,0,.18);border-radius:4px;padding:0 3px;margin-top:1px">'+cnt+'</div>':'';
+    const bg = C[type][0]; const br = C[type][1]; const tc = C[type][2];
+    const bord = (isSel?'2px':'1px')+' solid '+(isSel?'#1a237e':br);
+    return '<div data-kid="'+id+'" style="background:'+bg+';border:'+bord+';border-radius:4px;cursor:pointer;text-align:center;padding:3px 2px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:'+(minH||26)+'px">'
+      +'<div style="font-size:10px;font-weight:500;color:'+tc+';line-height:1.1">'+lbl+'</div>'
+      +(sub?'<div style="font-size:7px;color:'+tc+';opacity:.7">'+sub+'</div>':'')
+      +badge+'</div>';
+  }
+  function empty(h){ return '<div style="border:1px dashed #e0e0e0;border-radius:4px;min-height:'+(h||26)+'px;display:flex;align-items:center;justify-content:center"><span style="font-size:8px;color:#bdbdbd">ריק</span></div>'; }
+  function cm(t){ return '<div style="font-size:8px;text-align:center;color:#9e9e9e;margin-top:2px">'+t+'</div>'; }
+  function col(content,flex){ return '<div style="flex:'+flex+';display:flex;flex-direction:column;gap:2px">'+content+'</div>'; }
+
+  let h = '';
+
+  // ─── קיר עיקרי עליון ───
+  h += '<div style="font-size:9px;font-weight:500;color:var(--muted);margin-bottom:3px;text-align:center">▲ קיר ראשי</div>';
+  h += '<div style="display:flex;gap:3px;margin-bottom:3px">';
+  h += col(u('kiyyor','כיור','80cm','kiyyor'),84);
+  h += col(u('madiach','מדיח','60cm','kiyyor'),63);
+  h += col(u('bld','בילד אין','7,14 — 60cm','madaf'),63);
+  h += col(u('dlt','דלת מעבר','6,13,קלפה — 80cm','madaf'),84);
+  h += col(u('mkr4','מקרר','4,11 — 60cm','madaf'),63);
+  h += col(u('mkr3','מקרר','3,10 — 60cm','madaf'),63);
+  h += col(u('vit','ויטרינה','5,12,18 — 25cm','vitra'),26);
+  h += col(u('mz2','מזווה 2','2,9 — 70cm','madaf'),74);
+  h += col(u('mz1','מזווה 1','1,8 — 70cm','madaf'),74);
+  h += '</div>';
+
+  // ─── שורה תחתונה קיר עיקרי ───
+  h += '<div style="display:flex;gap:3px;margin-bottom:8px;align-items:flex-start">';
+
+  // כיור + מדיח בשמאל
+  h += col(u('kiyyorb','23 — כיור','חומרי ניקוי','kiyyor')+cm('80cm'), 84);
+  h += col(u('madiachb','מדיח','','kiyyor')+cm('60cm'), 63);
+
+  // בילד אין: קלפה, מיקרוגל, תנור, מגירה 9
+  h += col(
+    u('klafa','קלפה','','other')
+    +u('micro','מיקרוגל','','micro')
+    +'<div data-kid="tanur" style="background:#ede7f6;border:1px solid #b39ddb;border-radius:4px;cursor:pointer;text-align:center;padding:4px 2px;min-height:34px;display:flex;align-items:center;justify-content:center"><div style="font-size:10px;font-weight:500;color:#4a148c">תנור</div></div>'
+    +u('mg9','9','','mgira')+cm('60cm'),
+    63);
+
+  // דלת מעבר — ריק
+  h += col(empty(90)+cm('80cm'), 84);
+  // מקרר ימין — ריק
+  h += col(empty(90)+cm('60cm'), 63);
+  // מקרר שמאל — ריק
+  h += col(empty(90)+cm('60cm'), 63);
+
+  // ויטרינה: מדפים בלבד
+  h += col(
+    u('vit_s1','מדף','','vitra')+u('vit_s2','מדף','','vitra')+u('vit_s3','מדף','','vitra')+u('vit_s4','מדף','','vitra')+cm('25'),
+    26);
+
+  // מזווה 2: 5,6,7,8H
+  h += col(
+    u('mg5','5','','mgira')+u('mg6','6','','mgira')+u('mg7','7','','mgira')+u('mg8H','8H','גבוהה','mgiraH')+cm('70cm'),
+    74);
+
+  // מזווה 1: 1,2,3,4H
+  h += col(
+    u('mg1','1','','mgira')+u('mg2','2','','mgira')+u('mg3','3','','mgira')+u('mg4H','4H','גבוהה','mgiraH')+cm('70cm'),
+    74);
+
+  // קיר L ימין — מגירות 10-15 + סכומונים
+  h += '<div style="display:flex;flex-direction:column;gap:2px;min-width:80px;max-width:90px">';
+  h += '<div style="font-size:8px;font-weight:500;color:var(--muted);text-align:center;margin-bottom:2px">קיר L ←</div>';
+  h += u('mg22','22','סכומון','sechum');
+  h += u('mg10','10','כוסות','mgira');
+  h += u('mg11','11','פיירקסים','mgira');
+  h += cm('80cm');
+  h += u('mg25','25','סכומון','sechum');
+  h += u('mg12','12','בישול','mgira');
+  h += u('mg13','13','חשמל','mgira');
+  h += cm('90cm');
+  h += u('mg14','14','שקיות','mgira');
+  h += u('mg15','15','עמוקה','amuka');
+  h += cm('100cm');
+  h += '</div>';
+  h += '</div>';
+
+  // ─── אי מרכזי ───
+  h += '<div style="background:#fffde7;border:1.5px solid #f9a825;border-radius:8px;padding:6px;margin-bottom:6px">';
+  h += '<div style="font-size:9px;font-weight:500;color:#e65100;text-align:center;margin-bottom:4px">אי מרכזי</div>';
+  h += '<div style="display:flex;gap:3px;align-items:flex-start">';
+
+  // שמאל: 24 + 16-17
+  h += col(u('mg24','24','סכומון','sechum')+u('mg16','16','הגשה','mgira')+u('mg17','17','הגשה','mgira')+cm('90cm'), 90);
+
+  // כיריים + 18-19
+  h += '<div style="flex:90;display:flex;flex-direction:column;gap:2px">';
+  h += '<div data-kid="kiriyim" style="background:#ffcdd2;border:1px solid #e57373;border-radius:4px;cursor:pointer;text-align:center;padding:5px 2px">'
+    +'<div style="font-size:10px;font-weight:500;color:#b71c1c">כיריים 90cm</div>'
+    +'<div style="display:flex;justify-content:center;gap:3px;margin-top:3px">'
+    +'<div style="width:9px;height:9px;border-radius:50%;border:1px solid #e57373"></div>'
+    +'<div style="width:7px;height:7px;border-radius:50%;border:1px solid #e57373;margin-top:1px"></div>'
+    +'<div style="width:9px;height:9px;border-radius:50%;border:1px solid #e57373"></div>'
+    +'<div style="width:6px;height:6px;border-radius:50%;border:1px solid #e57373;margin-top:2px"></div>'
+    +'</div></div>';
+  h += u('mg18','18','בישול','mgira')+u('mg19','19','בישול','mgira');
+  h += '</div>';
+
+  // תבלינים 40cm
+  h += col(u('mg20','20','תבלינים','mgira')+u('mg21','21','בקבוקים','mgira')+cm('40cm'), 40);
+
+  // ריק 100cm
+  h += '<div style="flex:100;border:1px dashed #e0e0e0;border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:90px">'
+    +'<div style="font-size:9px;color:#bdbdbd">ריק</div><div style="font-size:8px;color:#bdbdbd">100cm</div></div>';
+
+  h += '</div></div>';
+  h += '<div style="text-align:center;font-size:9px;color:var(--muted);margin-top:4px">▼ חלל המטבח</div>';
+
+  container.innerHTML = h;
+}
+
+function selectKUnit(id){
+  selectedKUnit = id;
+  renderKitchenPlan();
+
+  const panel = document.getElementById('kitchen-detail');
+  const items = getKItems(id);
+  const c = K_COLORS[id] || {bg:'#f5f5f5', text:'#424242'};
+
+  // מיפוי שמות תצוגה
+  const NAMES = {
+    mz1:'מזווה 1 — עליון',mz2:'מזווה 2 — עליון',vit:'ויטרינה — עליון',
+    mkr3:'מקרר שמאל — עליון',mkr4:'מקרר ימין — עליון',dlt:'דלת מעבר — עליון',
+    bld:'בילד אין — עליון',madiach:'מדיח — עליון',kiyyor:'כיור — עליון',
+    mg1:'מגירה 1',mg2:'מגירה 2',mg3:'מגירה 3',mg4H:'מגירה 4H — גבוהה',
+    mg5:'מגירה 5',mg6:'מגירה 6',mg7:'מגירה 7',mg8H:'מגירה 8H — גבוהה',
+    mg9:'מגירה 9 (בילד אין)',
+    mg10:'מגירה 10',mg11:'מגירה 11',mg12:'מגירה 12',mg13:'מגירה 13',
+    mg14:'מגירה 14',mg15:'מגירה 15 — עמוקה',
+    mg16:'מגירה 16 — אי',mg17:'מגירה 17 — אי',
+    mg18:'מגירה 18 — מתחת כיריים',mg19:'מגירה 19 — מתחת כיריים',
+    mg20:'מגירה 20 — תבלינים',mg21:'מגירה 21 — בקבוקים',
+    mg22:'מגירה 22 — סכומון (מגבות)',mg24:'מגירה 24 — סכומון',mg25:'מגירה 25 — סכומון',
+    kiriyim:'כיריים',tanur:'תנור',micro:'מיקרוגל',
+    klafa:'קלפה',kiyyorb:'ארון כיור 23',madiachb:'מדיח',
+    mzvh:'מזווה',vit_s1:'ויטרינה — מדף',vit_s2:'ויטרינה — מדף',
+    vit_s3:'ויטרינה — מדף',vit_s4:'ויטרינה — מדף',
+  };
+
+  const name = NAMES[id] || id;
+
+  // צבע לפי סוג
+  const bg = id.includes('22')||id.includes('24')||id.includes('25') ? '#ffe0b2'
+    : id==='kiriyim'||id==='tanur'||id==='micro' ? '#ffcdd2'
+    : id==='kiyyorb'||id==='madiachb'||id==='madiach'||id==='kiyyor' ? '#e1f5fe'
+    : id==='mg4H'||id==='mg8H' ? '#1565c0'
+    : id==='mg15' ? '#fff9c4'
+    : '#bbdefb';
+  const tc = id==='mg4H'||id==='mg8H' ? '#e3f2fd'
+    : id.includes('22')||id.includes('24')||id.includes('25') ? '#e65100'
+    : '#0d47a1';
+
+  let h = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+    +'<div><div style="font-size:15px;font-weight:500;color:var(--ink)">'+name+'</div>'
+    +'<div style="font-size:12px;color:var(--muted)">'+items.length+' פריטים</div></div>'
+    +'<button data-add-id="'+id+'" data-add-name="'+name+'" style="padding:6px 12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:.75rem;font-weight:700;cursor:pointer">+ הוסף</button>'
+    +'</div>';
+
+  if(items.length===0){
+    h += '<div style="text-align:center;color:var(--muted);font-size:13px;padding:12px">אין פריטים — לחץ הוסף</div>';
+  } else {
+    const cats = [...new Set(items.map(i=>i.cat))];
+    cats.forEach(cat=>{
+      const catItems = items.filter(i=>i.cat===cat);
+      const col = kCatColor(cat);
+      h += '<div style="margin-bottom:10px">'
+        +'<div style="font-size:11px;font-weight:600;color:'+col+';padding:2px 8px;background:'+col+'22;border-radius:10px;display:inline-block;margin-bottom:4px">'+cat+'</div>';
+      catItems.forEach(it=>{
+        h += '<div class="k-item-row">'
+          +'<div class="k-cat-dot" style="background:'+col+'"></div>'
+          +'<div style="flex:1"><div class="k-item-name">'+it.name+'</div>'
+          +(it.notes?'<div class="k-item-cat">'+it.notes+'</div>':'')+'</div>'
+          +'<button onclick="openKitchenEditItem('+it._idx+')" style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:3px 6px">✏️</button>'
+          +'<button onclick="askDeleteKitchenItem('+it._idx+')" style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:3px 6px;color:var(--red)">🗑️</button>'
+          +'</div>';
+      });
+      h += '</div>';
+    });
+  }
+  panel.innerHTML = h;
+}
+
+
+
+function kitchenSearch(q){
+  const resultsEl = document.getElementById('kitchen-search-results');
+  if(!q || q.trim().length < 1){ resultsEl.style.display='none'; return; }
+  const term = q.trim().toLowerCase();
+  const results = KITCHEN_ITEMS.map((it,i)=>Object.assign({},it,{_idx:i}))
+    .filter(it=>it.name.toLowerCase().includes(term)||it.cat.toLowerCase().includes(term));
+  if(results.length===0){
+    resultsEl.style.display='block';
+    resultsEl.innerHTML='<div style="padding:12px;text-align:center;color:var(--muted);font-size:13px">לא נמצאו תוצאות</div>';
+    return;
+  }
+  const LOCNAMES = {
+    '8':'מדף 8 — מזווה','9':'מגירה 9 — בילד אין',
+    '10':'מגירה 10','11':'מגירה 11','12':'מגירה 12','13':'מגירה 13',
+    '14':'מגירה 14','15':'מגירה 15 (עמוקה)',
+    '16':'מגירה 16 — אי','17':'מגירה 17 — אי',
+    '18+19':'מגירות 18-19 — כיריים',
+    '20':'מגירה 20 — תבלינים','21':'מגירה 21 — תבלינים',
+    '22':'מגירה 22 — סכומון','23':'ארון כיור 23',
+    '24':'מגירה 24 — סכומון','25':'מגירה 25 — סכומון',
+    '4':'מדף 4 — מקרר',
+    'klafa':'קלפה — בילד אין','mzvh':'מזווה','שיש':'שיש',
+    'kiyyorb':'ארון כיור 23',
+  };
+  let html2 = '<div style="padding:6px 10px;font-size:11px;color:var(--muted);border-bottom:0.5px solid var(--border)">'+results.length+' תוצאות</div>';
+  results.forEach(it=>{
+    const locName = LOCNAMES[it.loc]||it.loc;
+    const col = kCatColor(it.cat);
+    html2 += '<div data-kid="'+it.loc+'" style="display:flex;align-items:center;padding:9px 12px;border-bottom:0.5px solid var(--border);gap:10px;cursor:pointer">'
+      +'<div style="width:8px;height:8px;border-radius:50%;background:'+col+';flex-shrink:0"></div>'
+      +'<div style="flex:1"><div style="font-size:13px;font-weight:500;color:var(--ink)">'+it.name+'</div>'
+      +'<div style="font-size:11px;color:var(--muted)">'+it.cat+'</div></div>'
+      +'<div style="font-size:11px;font-weight:600;color:var(--accent);white-space:nowrap">📍 '+locName+'</div>'
+      +'</div>';
+  });
+  resultsEl.style.display='block';
+  resultsEl.innerHTML=html2;
+  resultsEl.querySelectorAll('[data-kid]').forEach(el=>{
+    el.addEventListener('click',()=>{ selectKUnit(el.getAttribute('data-kid')); document.getElementById('kitchen-search').value=''; resultsEl.style.display='none'; });
+  });
+}
+
+
+function exportKitchenExcel() {
+  if (typeof XLSX === 'undefined') { showToast('⚠️ XLSX לא נטען'); return; }
+  const wb = XLSX.utils.book_new();
+
+  // ── גיליון 1: רשימת מוצרים מלאה (כמו האקסל המקורי) ──
+  const header = ['תיאור','קטגוריה','מס\' מגירה','מס\' מדף','הערות'];
+  const rows = [header];
+
+  const MADAF_LOCS = {'8':'8','1':'1','2':'2','3':'3','4':'4','5':'5','6':'6','7':'7',
+    '9':'9','10':'10','11':'11','12':'12','13':'13','14':'14'};
+
+  KITCHEN_ITEMS.forEach(it => {
+    const isMadaf = Object.values(MADAF_LOCS).includes(String(it.loc)) && Number(it.loc)<=14 && Number(it.loc)>=1;
+    rows.push([
+      it.name || '',
+      it.cat || '',
+      isMadaf ? '' : (it.loc||''),
+      isMadaf ? (it.loc||'') : '',
+      it.notes || '',
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:35},{wch:20},{wch:14},{wch:10},{wch:35}];
+  XLSX.utils.book_append_sheet(wb, ws, 'רשימת מוצרים');
+
+  // ── גיליון 2: חלוקה לפי מגירה ──
+  const MGIRA_NAMES = {
+    '1':'מגירה 1 — מזווה 1','2':'מגירה 2 — מזווה 1','3':'מגירה 3 — מזווה 1','4H':'מגירה 4H — מזווה 1 (גבוהה)',
+    '5':'מגירה 5 — מזווה 2','6':'מגירה 6 — מזווה 2','7':'מגירה 7 — מזווה 2','8H':'מגירה 8H — מזווה 2 (גבוהה)',
+    '9':'מגירה 9 — בילד אין',
+    '10':'מגירה 10 (80cm)','11':'מגירה 11 (80cm)',
+    '12':'מגירה 12 (90cm)','13':'מגירה 13 (90cm)',
+    '14':'מגירה 14 (100cm)','15':'מגירה 15 (100cm) — עמוקה',
+    '16':'מגירה 16 — אי (90cm)','17':'מגירה 17 — אי (90cm)',
+    '18+19':'מגירות 18+19 — מתחת כיריים (90cm)',
+    '20':'מגירה 20 — תבלינים (40cm)','21':'מגירה 21 — תבלינים (40cm)',
+    '22':'מגירה 22 — סכומון נמוכה','23':'ארון כיור 23','24':'מגירה 24 — סכומון חיצוני','25':'מגירה 25 — סכומון',
+    'klafa':'קלפה — בילד אין','mzvh':'מזווה (אחסון)','שיש':'שיש','4':'מדף 4 — מקרר',
+  };
+
+  const locOrder = ['mzvh','klafa','1','2','3','4H','5','6','7','8H','9','10','11','12','13','14','15','16','17','18+19','20','21','22','23','24','25','4','שיש'];
+  const mgiraRows = [['מגירה / מיקום','תיאור','קטגוריה','הערות']];
+
+  locOrder.forEach(loc => {
+    const items = KITCHEN_ITEMS.filter(it=>String(it.loc)===loc);
+    if(items.length===0) return;
+    const locName = MGIRA_NAMES[loc]||loc;
+    // שורת כותרת מגירה
+    mgiraRows.push([locName,'','','']);
+    items.forEach(it=>{
+      mgiraRows.push(['', it.name||'', it.cat||'', it.notes||'']);
+    });
+    mgiraRows.push(['','','','']); // רווח
+  });
+
+  const ws2 = XLSX.utils.aoa_to_sheet(mgiraRows);
+  ws2['!cols'] = [{wch:35},{wch:30},{wch:20},{wch:30}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'חלוקה לפי מגירה');
+
+  // ── גיליון 3: סיכום כמויות ──
+  const sumRows = [['קטגוריה','כמות פריטים']];
+  const catCount = {};
+  KITCHEN_ITEMS.forEach(it=>{ catCount[it.cat]=(catCount[it.cat]||0)+1; });
+  Object.entries(catCount).sort((a,b)=>b[1]-a[1]).forEach(([c,n])=>sumRows.push([c,n]));
+  sumRows.push(['סה"כ', KITCHEN_ITEMS.length]);
+  const ws3 = XLSX.utils.aoa_to_sheet(sumRows);
+  ws3['!cols'] = [{wch:22},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws3, 'סיכום קטגוריות');
+
+  const d = new Date();
+  XLSX.writeFile(wb, 'מפת_מטבח_'+d.getDate()+'-'+(d.getMonth()+1)+'-'+d.getFullYear()+'.xlsx');
+  showToast('📊 Excel מטבח יוצא בהצלחה!');
+}
+
+
+function testFirebaseConnection(){
+  const resultEl = document.getElementById('firebase-test-result');
+  resultEl.textContent = '⏳ בודק...';
+  resultEl.style.color = 'var(--muted)';
+  const testRef = db.ref('_test_connection');
+  const testVal = {ts: Date.now(), ok: true};
+  testRef.set(testVal)
+    .then(()=>{
+      return testRef.once('value');
+    })
+    .then(snap=>{
+      if(snap.val()&&snap.val().ok){
+        resultEl.textContent = '✅ חיבור תקין — Firebase עובד!';
+        resultEl.style.color = 'var(--green)';
+        testRef.remove();
+      }
+    })
+    .catch(err=>{
+      resultEl.textContent = '❌ שגיאה: '+err.message;
+      resultEl.style.color = 'var(--red)';
+    });
+}
+
+function renderAll() {
+  console.log('[renderAll] start');
+  try { var f = getFiltered(); console.log('[renderAll] getFiltered OK items:', f.length); } catch(err){ console.error('[renderAll] getFiltered FAILED:', err.message); return; }
+  try { renderDashboard(); console.log('[renderAll] renderDashboard OK'); } catch(err){ console.error('[renderAll] renderDashboard FAILED:', err.message); return; }
+  try { renderCategories(f); console.log('[renderAll] renderCategories OK'); } catch(err){ console.error('[renderAll] renderCategories FAILED:', err.message, err.stack); return; }
+  try { renderGrand(f); console.log('[renderAll] renderGrand OK'); } catch(err){ console.error('[renderAll] renderGrand FAILED:', err.message); }
+  console.log('[renderAll] done');
+}
+
+// ══════════════════════════════════════════════
+// KITCHEN MODULE
+// ══════════════════════════════════════════════
+
+const refKitchen = db.ref('kitchen');
+let KITCHEN_ITEMS = [];
+let kitchenConnected = false;
+let selectedKUnit = null;
+let editingKItemIdx = null;
+let pendingDeleteKIdx = null;
+
+const CAT_COLORS_K = {
+  'בישול':'#185FA5','הגשה':'#3B6D11','כוסות':'#8b5cf6',
+  'קפה/סוכר/תה':'#854F0B','תבלינים':'#dc2626','מוצרי חשמל':'#0F6E56',
+  'חד פעמי':'#888780','חומרי ניקוי':'#A32D2D','קופסאות ואחסון':'#185FA5',
+  'מגבות':'#3B6D11','בקבוקים':'#854F0B','דברי קודש לשבת':'#8b5cf6',
+  'סכומון':'#0F6E56','מזון יבש':'#dc2626','אחר':'#888780'
+};
+function kCatColor(c){ return CAT_COLORS_K[c]||'#888780'; }
+
+const UPPER_UNITS = [
+  {id:'1',label:'מזווה 1',type:'k-madaf',sub:'מדפים 1+8'},
+  {id:'2',label:'מזווה 2',type:'k-madaf',sub:'מדפים 2+9'},
+  {id:'קלפה',label:'קלפה',type:'k-other',sub:'דברי קודש'},
+  {id:'5',label:'ויטרינה',type:'k-madaf',sub:'מדפים 5+12'},
+  {id:'3',label:'מקרר 3',type:'k-madaf',sub:'מדף 3+10'},
+  {id:'4',label:'מקרר 4',type:'k-madaf',sub:'מדף 4+11'},
+  {id:'6',label:'דלת מעבר',type:'k-madaf',sub:'מדף 6+13'},
+  {id:'7',label:'בילד אין',type:'k-madaf',sub:'מדף 7+14'},
+];
+
+const LOWER_UNITS = [
+  {id:'מזווה',label:'מזווה',type:'k-other',sub:'אחסון'},
+  {id:'8',label:'8',type:'k-mgira',sub:'מגירה'},
+  {id:'9',label:'9',type:'k-mgira',sub:'מגירה'},
+  {id:'10',label:'10',type:'k-mgira',sub:'מגירה'},
+  {id:'11',label:'11',type:'k-mgira',sub:'מגירה'},
+  {id:'12',label:'12',type:'k-mgira',sub:'מגירה'},
+  {id:'13',label:'13',type:'k-mgira',sub:'מגירה'},
+  {id:'14',label:'14',type:'k-mgira',sub:'מגירה'},
+  {id:'15',label:'15',type:'k-mgira',sub:'ויטרינה'},
+  {id:'16',label:'16',type:'k-mgira',sub:'הגשה'},
+  {id:'17',label:'17',type:'k-mgira',sub:'הגשה'},
+  {id:'18+19',label:'18+19',type:'k-mgira',sub:'בישול'},
+  {id:'20',label:'20',type:'k-mgira',sub:'תבלינים'},
+  {id:'21',label:'21',type:'k-mgira',sub:'בקבוקים'},
+  {id:'22',label:'22',type:'k-mgira',sub:'מגבות'},
+  {id:'23',label:'23',type:'k-other',sub:'כיור'},
+  {id:'24',label:'24',type:'k-mgira',sub:'סכומון'},
+  {id:'25',label:'25',type:'k-mgira',sub:'סכומון'},
+  {id:'שיש',label:'שיש',type:'k-other',sub:'שיש'},
+];
+
+const DEFAULT_KITCHEN = [
+  {name:'קורנפלקס',cat:'מזון יבש',loc:'8',notes:'מדף 8 — מזווה'},
+  {name:'תבניות לאפייה',cat:'בישול',loc:'9',notes:'מגירה 9 — בילד אין'},
+  {name:'נייר אפייה',cat:'הגשה',loc:'9',notes:'מגירה 9 — בילד אין'},
+  {name:'כוסות חם',cat:'כוסות',loc:'10',notes:''},
+  {name:'כוסות קר',cat:'כוסות',loc:'10',notes:''},
+  {name:'קפה, נס, תה',cat:'קפה/סוכר/תה',loc:'10',notes:'ליד הכוסות ותמי 4'},
+  {name:'קופסאות פלסטיק',cat:'קופסאות ואחסון',loc:'11',notes:''},
+  {name:'פיירקסים',cat:'קופסאות ואחסון',loc:'11',notes:''},
+  {name:'קערות כסופות',cat:'בישול',loc:'12',notes:''},
+  {name:'מסננים למינהם',cat:'בישול',loc:'12',notes:''},
+  {name:'קרש חיתוך',cat:'בישול',loc:'12',notes:''},
+  {name:'טוחן מזון',cat:'מוצרי חשמל',loc:'13',notes:''},
+  {name:'מצנם',cat:'מוצרי חשמל',loc:'13',notes:''},
+  {name:'טוסטר',cat:'מוצרי חשמל',loc:'13',notes:''},
+  {name:'שקיות אוכל',cat:'חד פעמי',loc:'14',notes:''},
+  {name:'שקיות זיפר',cat:'חד פעמי',loc:'14',notes:''},
+  {name:'נייר כסף',cat:'חד פעמי',loc:'14',notes:''},
+  {name:'שקיות אשפה',cat:'חד פעמי',loc:'14',notes:''},
+  {name:'מיקסר',cat:'מוצרי חשמל',loc:'15',notes:'מגירה עמוקה'},
+  {name:'נינגה',cat:'מוצרי חשמל',loc:'15',notes:'מגירה עמוקה'},
+  {name:'צלחות גדולות',cat:'הגשה',loc:'16',notes:''},
+  {name:'צלחות קטנות',cat:'הגשה',loc:'16',notes:''},
+  {name:'קערות קורנפלקס',cat:'הגשה',loc:'16',notes:''},
+  {name:'צלחות ילדים',cat:'הגשה',loc:'16',notes:''},
+  {name:'קערות ילדים',cat:'הגשה',loc:'16',notes:''},
+  {name:'קערות מרק',cat:'הגשה',loc:'17',notes:''},
+  {name:'קערות לסלט',cat:'הגשה',loc:'17',notes:''},
+  {name:'מגשי הגשה קטנים',cat:'הגשה',loc:'17',notes:''},
+  {name:'מגשי הגשה גדולים',cat:'הגשה',loc:'17',notes:''},
+  {name:'סירים',cat:'בישול',loc:'18+19',notes:''},
+  {name:'מחבתות',cat:'בישול',loc:'18+19',notes:''},
+  {name:'תבנית לסינון מטוגנים',cat:'בישול',loc:'18+19',notes:''},
+  {name:'קופסאות תבלינים',cat:'תבלינים',loc:'20',notes:''},
+  {name:'בקבוקי שמן למינהם',cat:'תבלינים',loc:'21',notes:''},
+  {name:'בקבוקי שמן',cat:'בקבוקים',loc:'21',notes:''},
+  {name:'מגבות מטבח',cat:'מגבות',loc:'22',notes:'מגירה נמוכה'},
+  {name:'סמרטוטים',cat:'חומרי ניקוי',loc:'22',notes:''},
+  {name:'חומרי ניקוי',cat:'חומרי ניקוי',loc:'23',notes:'מתחת לכיור'},
+  {name:'סכום חלבי בשרי',cat:'סכומון',loc:'24',notes:'סכומון מגירה חיצונית'},
+  {name:'כלים שוטפים לבישול ואפייה וטיגון',cat:'סכומון',loc:'25',notes:''},
+  {name:'בקבוקי שתיה',cat:'בקבוקים',loc:'4',notes:'מדף 4 — מקרר'},
+  {name:'כוסות יין',cat:'כוסות',loc:'15',notes:'N/A — לפי הערה באקסל'},
+  {name:'כיפות',cat:'דברי קודש לשבת',loc:'klafa',notes:''},
+  {name:'כוס קידוש',cat:'דברי קודש לשבת',loc:'klafa',notes:''},
+  {name:'נטלן',cat:'דברי קודש לשבת',loc:'klafa',notes:''},
+  {name:'מטפחת',cat:'דברי קודש לשבת',loc:'klafa',notes:''},
+  {name:'מעמד לנרות שבת',cat:'דברי קודש לשבת',loc:'klafa',notes:''},
+  {name:'נרות לשבת',cat:'חד פעמי',loc:'klafa',notes:''},
+  {name:'גפרורים',cat:'חד פעמי',loc:'klafa',notes:''},
+  {name:'נייר סופג',cat:'חד פעמי',loc:'mzvh',notes:'מיקום לא צוין באקסל'},
+  {name:'כוסות חד פעמי',cat:'חד פעמי',loc:'mzvh',notes:''},
+  {name:'צלחות חד פעמי',cat:'חד פעמי',loc:'mzvh',notes:''},
+  {name:'תבניות חד פעמיות',cat:'חד פעמי',loc:'mzvh',notes:''},
+  {name:'כפפות',cat:'חד פעמי',loc:'mzvh',notes:''},
+  {name:'סקווצים',cat:'חומרי ניקוי',loc:'mzvh',notes:''},
+  {name:'שימורים',cat:'מזון יבש',loc:'mzvh',notes:''},
+  {name:'חטיפים',cat:'מזון יבש',loc:'mzvh',notes:''},
+  {name:'אפייה',cat:'מזון יבש',loc:'mzvh',notes:''},
+  {name:'פסטות וקטניות',cat:'מזון יבש',loc:'mzvh',notes:''},
+  {name:'עוגיות',cat:'מזון יבש',loc:'mzvh',notes:''},
+  {name:'מכונת קפה',cat:'מוצרי חשמל',loc:'שיש',notes:''},
+];
+
+// Firebase
+refKitchen.once('value').then(snap=>{
+  const val=snap.val();
+  const isValid = val&&Array.isArray(val)&&val.length>0
+    &&val.some(it=>it.loc==='16')  // יש נתוני הגשה
+    &&val.some(it=>it.loc==='12')  // יש נתוני בישול
+    &&val.some(it=>it.loc==='10'); // יש נתוני כוסות
+  if(!isValid){
+    refKitchen.set(DEFAULT_KITCHEN).then(()=>{
+      KITCHEN_ITEMS=JSON.parse(JSON.stringify(DEFAULT_KITCHEN));
+      initKitchen();
+    });
+  } else {KITCHEN_ITEMS=val;initKitchen();}
+}).catch(()=>{KITCHEN_ITEMS=JSON.parse(JSON.stringify(DEFAULT_KITCHEN));initKitchen();});
+
+refKitchen.on('value',snap=>{
+  const val=snap.val();
+  if(val&&Array.isArray(val)){
+    KITCHEN_ITEMS=val;
+    if(!kitchenConnected){kitchenConnected=true;}
+    if(!localChange){ renderKitchenPlan(); if(selectedKUnit) selectKUnit(selectedKUnit); }
+    renderKitchenUnits();
+  }
+});
+
+function pushKitchen(){
+  localChange=true;
+  setSyncStatus('syncing','שומר...');
+  refKitchen.set(KITCHEN_ITEMS)
+    .then(()=>{ setSyncStatus('connected','נשמר ✓'); setTimeout(()=>setSyncStatus('connected','מסונכרן ✓'),2000); })
+    .catch(err=>{ localChange=false; setSyncStatus('','שגיאת שמירה'); showToast('⚠️ שגיאה: '+err.message); });
+}
+
+function getKItems(locId){
+  const l = String(locId).replace(/^mg/,'');
+  const mapped = l==='kiyyorb'?'23':l; // kiyyorb = ארון כיור = 23
+  return KITCHEN_ITEMS.map((it,i)=>Object.assign({},it,{_idx:i})).filter(it=>{
+    const il = String(it.loc||'');
+    if(il === mapped) return true;
+    if(il === l) return true;
+    if((l==='18'||l==='19') && il==='18+19') return true;
+    if(l==='18+19' && (il==='18'||il==='19'||il==='18+19')) return true;
+    return false;
+  });
+}
+
+function initKitchen(){
+  document.getElementById('kitchen-loading').style.display='none';
+  document.getElementById('kitchen-app').style.display='block';
+  document.getElementById('kitchen-plan').addEventListener('click',function(e){
+    const el = e.target.closest('[data-kid]');
+    if(el) selectKUnit(el.getAttribute('data-kid'));
+  });
+  document.getElementById('kitchen-detail').addEventListener('click',function(e){
+    const btn = e.target.closest('[data-add-id]');
+    if(btn) openKitchenAddItem(btn.getAttribute('data-add-id'), btn.getAttribute('data-add-name'));
+  });
+  renderKitchenPlan();
+}
+
+function renderKitchenUnits(){
+  if(document.getElementById('kitchen-plan')) { renderKitchenPlan(); return; }
+  ['upper-row','lower-row'].forEach((rowId,ri)=>{
+    const units=ri===0?UPPER_UNITS:LOWER_UNITS;
+    const row=document.getElementById(rowId);
+    if(!row)return;
+    row.innerHTML='';
+    units.forEach(u=>{
+      const items=getKItems(u.id);
+      const isSelected=selectedKUnit===u.id;
+      const div=document.createElement('div');
+      div.className='k-unit '+u.type+(isSelected?' k-selected':'');
+      div.innerHTML='<div class="k-num">'+u.label+'</div>'
+        +'<div class="k-type">'+u.sub+'</div>'
+        +(items.length>0?'<div class="k-cnt">'+items.length+'</div>':'');
+      div.addEventListener('click',()=>{selectedKUnit=u.id;renderKitchenUnits();renderKitchenDetail(u);});
+      row.appendChild(div);
+    });
+  });
+}
+
+function renderKitchenDetail(u){
+  const panel=document.getElementById('kitchen-detail');
+  const items=getKItems(u.id);
+  const cats=[...new Set(items.map(i=>i.cat))];
+  let html='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
+    +'<div><div style="font-size:15px;font-weight:700;color:var(--ink)">'+u.label+'</div>'
+    +'<div style="font-size:12px;color:var(--muted)">'+u.sub+' • '+items.length+' פריטים</div></div>'
+    +'<button onclick="openKitchenAddItem(\''+u.id+'\',\''+u.label+'\')" style="padding:6px 12px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-family:inherit;font-size:.75rem;font-weight:700;cursor:pointer">+ הוסף</button>'
+    +'</div>';
+
+  if(items.length===0){
+    html+='<div style="text-align:center;color:var(--muted);font-size:13px;padding:16px">אין פריטים — לחץ הוסף</div>';
+  } else {
+    cats.forEach(cat=>{
+      const catItems=items.filter(i=>i.cat===cat);
+      const col=kCatColor(cat);
+      html+='<div style="margin-bottom:10px">'
+        +'<div style="font-size:11px;font-weight:600;color:'+col+';margin-bottom:5px;padding:2px 8px;background:'+col+'18;border-radius:10px;display:inline-block">'+cat+'</div>';
+      catItems.forEach(it=>{
+        html+='<div class="k-item-row">'
+          +'<div class="k-cat-dot" style="background:'+col+'"></div>'
+          +'<div style="flex:1"><div class="k-item-name">'+it.name+'</div>'
+          +(it.notes?'<div class="k-item-cat">'+it.notes+'</div>':'')+'</div>'
+          +'<button onclick="openKitchenEditItem('+it._idx+')" style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:3px 6px">✏️</button>'
+          +'<button onclick="askDeleteKitchenItem('+it._idx+')" style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:3px 6px;color:var(--red)">🗑️</button>'
+          +'</div>';
+      });
+      html+='</div>';
+    });
+  }
+  panel.innerHTML=html;
+}
+
+function openKitchenAddItem(locId,label){
+  editingKItemIdx=null;
+  document.getElementById('kItemTitle').textContent='➕ הוסף פריט'+(label?' — '+label:'');
+  document.getElementById('kItemSaveBtn').textContent='הוסף פריט';
+  document.getElementById('ki-name').value='';
+  document.getElementById('ki-notes').value='';
+  document.getElementById('ki-cat').value='בישול';
+  if(locId)document.getElementById('ki-loc').value=locId;
+  document.getElementById('kItemOverlay').classList.add('open');
+  document.getElementById('kItemSheet').classList.add('open');
+  setTimeout(()=>document.getElementById('ki-name').focus(),350);
+}
+
+function openKitchenEditItem(idx){
+  editingKItemIdx=idx;
+  const it=KITCHEN_ITEMS[idx];
+  document.getElementById('kItemTitle').textContent='✏️ עריכת פריט';
+  document.getElementById('kItemSaveBtn').textContent='שמור שינויים';
+  document.getElementById('ki-name').value=it.name||'';
+  document.getElementById('ki-cat').value=it.cat||'בישול';
+  document.getElementById('ki-loc').value=it.loc||'מזווה';
+  document.getElementById('ki-notes').value=it.notes||'';
+  document.getElementById('kItemOverlay').classList.add('open');
+  document.getElementById('kItemSheet').classList.add('open');
+}
+
+function closeKitchenItemSheet(){
+  document.getElementById('kItemOverlay').classList.remove('open');
+  document.getElementById('kItemSheet').classList.remove('open');
+  editingKItemIdx=null;
+}
+
+function saveKitchenItem(){
+  const name=document.getElementById('ki-name').value.trim();
+  if(!name){showToast('⚠️ חובה להכניס שם');return;}
+  const item={name,cat:document.getElementById('ki-cat').value,loc:document.getElementById('ki-loc').value,notes:document.getElementById('ki-notes').value.trim()};
+  if(editingKItemIdx!==null){KITCHEN_ITEMS[editingKItemIdx]=item;showToast('✏️ פריט עודכן');}
+  else{KITCHEN_ITEMS.push(item);showToast('✅ פריט נוסף');}
+  pushKitchen();
+  closeKitchenItemSheet();
+  if(selectedKUnit) selectKUnit(selectedKUnit);
+  renderKitchenPlan();
+}
+
+function askDeleteKitchenItem(idx){
+  pendingDeleteKIdx=idx;
+  document.getElementById('kConfirmText').textContent='האם למחוק את הפריט "'+KITCHEN_ITEMS[idx].name+'"?';
+  document.getElementById('kConfirmOverlay').classList.add('open');
+}
+function closeKitchenConfirm(){document.getElementById('kConfirmOverlay').classList.remove('open');pendingDeleteKIdx=null;}
+function confirmDeleteKitchenItem(){
+  if(pendingDeleteKIdx===null)return;
+  const name=KITCHEN_ITEMS[pendingDeleteKIdx].name;
+  KITCHEN_ITEMS.splice(pendingDeleteKIdx,1);
+  pushKitchen();closeKitchenConfirm();
+  showToast('🗑️ "'+name+'" נמחק');
+  if(selectedKUnit) selectKUnit(selectedKUnit);
+  renderKitchenPlan();
+}
+
+
+// ══════════════════════════════════════════════
+// TASKS MODULE
+// ══════════════════════════════════════════════
+
+const refTasks = db.ref('tasks');
+let TASKS = [];
+let tasksConnected = false;
+let editingTaskIdx = null;
+let pendingDeleteTaskIdx = null;
+let taskPhaseOpen = {1:true,2:true,3:true,4:true};
+
+const PHASE_CONFIG = {
+  1:{name:'שלב 1 — חתימה וסגירה',emoji:'✍️',color:'#2980b9',target:'2025'},
+  2:{name:'שלב 2 — בנייה ושינויים',emoji:'🏗️',color:'#e67e22',target:'2025-2026'},
+  3:{name:'שלב 3 — לפני מסירה',emoji:'🔑',color:'#8e44ad',target:'לפני דצמבר 2027'},
+  4:{name:'שלב 4 — אחרי מסירה',emoji:'🏠',color:'#27ae60',target:'2028+'}
+};
+
+const DEFAULT_TASKS = [
+  // שלב 1 — חתימה וסגירה
+  {desc:'לסיים חתימה על חוזה רכישה',phase:1,date:'2025-04-01',owner:'שניכם',priority:'high',notes:'',done:true},
+  {desc:'לשלם מקדמה ראשונה לקבלן',phase:1,date:'2025-04-02',owner:'עידן',priority:'high',notes:'330,000 ₪',done:true},
+  {desc:'פתיחת תיק הלוואת קבלן בבנק הפועלים',phase:1,date:'2025-06-11',owner:'עידן',priority:'high',notes:'',done:true},
+  {desc:'ייפוי כח נוטריוני לעו"ד',phase:1,date:'2025-06-01',owner:'שניכם',priority:'high',notes:'',done:true},
+  {desc:'לבחור יועץ משכנתא',phase:1,date:'2025-12-01',owner:'שניכם',priority:'high',notes:'',done:false},
+  {desc:'לבדוק זכאות משרד השיכון',phase:1,date:'2025-08-01',owner:'עידן',priority:'med',notes:'',done:false},
+
+  // שלב 2 — בנייה ושינויים
+  {desc:'ישיבה עם נציג שינוי דיירים',phase:2,date:'2025-09-01',owner:'שניכם',priority:'high',notes:'לוודא רשימת שינויים',done:true},
+  {desc:'לאשר שינויי חשמל ושקעים',phase:2,date:'2025-09-15',owner:'עידן',priority:'high',notes:'',done:true},
+  {desc:'לאשר שינוי מיקום גז',phase:2,date:'2025-09-15',owner:'עידן',priority:'high',notes:'',done:true},
+  {desc:'לבחור ריצוף וחרגול',phase:2,date:'2025-10-01',owner:'שניכם',priority:'high',notes:'100x100 כולל עבודה',done:false},
+  {desc:'להזמין ריצוף מרפסת',phase:2,date:'2025-10-01',owner:'עידן',priority:'med',notes:'12 מ"ר — כבר הוזמן',done:true},
+  {desc:'לאשר שדרוג דלתות',phase:2,date:'2025-10-01',owner:'שניכם',priority:'med',notes:'חמדיה — 4 דלתות',done:true},
+  {desc:'לשבת עם מעצבת פנים',phase:2,date:'2025-11-01',owner:'שניכם',priority:'high',notes:'לתכנן מטבח וסלון',done:false},
+  {desc:'לאשר תוכנית מטבח עם ספק',phase:2,date:'2026-01-01',owner:'שניכם',priority:'high',notes:'',done:false},
+  {desc:'לבחור ספק מטבח (אביבי/רגבה/אחר)',phase:2,date:'2026-02-01',owner:'שניכם',priority:'high',notes:'לבדוק זיכוי קבלן 5,200',done:false},
+  {desc:'לאשר תוכנית ספרינקלרים',phase:2,date:'2025-11-01',owner:'עידן',priority:'med',notes:'',done:false},
+  {desc:'ביקור באתר בנייה',phase:2,date:'2026-06-01',owner:'שניכם',priority:'med',notes:'לוודא התקדמות',done:false},
+
+  // שלב 3 — לפני מסירה
+  {desc:'לקחת משכנתא מהבנק',phase:3,date:'2027-06-01',owner:'שניכם',priority:'high',notes:'לתאם עם יועץ משכנתא',done:false},
+  {desc:'לבחור מזגן מרכזי',phase:3,date:'2026-12-01',owner:'שניכם',priority:'high',notes:'לבדוק INV עם קרר HFO',done:false},
+  {desc:'לקבל הצעות לבדק בית',phase:3,date:'2027-09-01',owner:'עידן',priority:'high',notes:'לבצע חודש לפני מסירה',done:false},
+  {desc:'לבצע בדק בית הנדסי',phase:3,date:'2027-11-01',owner:'שניכם',priority:'high',notes:'לפני חתימה על מסירה',done:false},
+  {desc:'לבחור שיש למטבח',phase:3,date:'2026-10-01',owner:'שניכם',priority:'high',notes:'שיש פורצלן',done:false},
+  {desc:'לבחור ספק מזגנים עיליים',phase:3,date:'2027-01-01',owner:'עידן',priority:'med',notes:'3 יחידות 1 כ"ס',done:false},
+  {desc:'להזמין ארונות בגדים',phase:3,date:'2027-03-01',owner:'שניכם',priority:'med',notes:'הורים + ילדים',done:false},
+  {desc:'להזמין ריהוט סלון',phase:3,date:'2027-06-01',owner:'שניכם',priority:'med',notes:'ספה, שולחן, מזנון',done:false},
+  {desc:'לרכוש מוצרי חשמל',phase:3,date:'2027-08-01',owner:'שניכם',priority:'med',notes:'תנור, מדיח, מיקרוגל, כיריים',done:false},
+  {desc:'לתכנן גבס וניגוד',phase:3,date:'2027-01-01',owner:'שניכם',priority:'med',notes:'',done:false},
+  {desc:'לבחור תאורה',phase:3,date:'2027-04-01',owner:'שניכם',priority:'low',notes:'מאווררי תקרה לחדרי ילדים',done:false},
+  {desc:'לבחור ווילונות',phase:3,date:'2027-08-01',owner:'אשתי',priority:'low',notes:'',done:false},
+  {desc:'לרכוש ביטוח דירה',phase:3,date:'2027-11-01',owner:'עידן',priority:'high',notes:'',done:false},
+
+  // שלב 4 — אחרי מסירה
+  {desc:'לחתום על פרוטוקול מסירה',phase:4,date:'2027-12-30',owner:'שניכם',priority:'high',notes:'לבדוק ליקויים לפני חתימה',done:false},
+  {desc:'לשלם תשלום אחרון לקבלן',phase:4,date:'2027-12-30',owner:'עידן',priority:'high',notes:'642,500 ₪',done:false},
+  {desc:'להכין רשימת ליקויים למסירה',phase:4,date:'2027-12-30',owner:'שניכם',priority:'high',notes:'',done:false},
+  {desc:'להתקין מזגנים',phase:4,date:'2028-01-15',owner:'עידן',priority:'high',notes:'לתאם עם חברת מזגנים',done:false},
+  {desc:'לרכוש ולהתקין סורגים שקופים',phase:4,date:'2028-01-01',owner:'עידן',priority:'high',notes:'סוגר הקסם לחדרי ילדים',done:false},
+  {desc:'לארגן הובלה',phase:4,date:'2028-01-10',owner:'שניכם',priority:'high',notes:'',done:false},
+  {desc:'להכין רשתות למרפסת וחדר שירות',phase:4,date:'2028-02-01',owner:'עידן',priority:'med',notes:'',done:false},
+  {desc:'לרשום דירה בטאבו',phase:4,date:'2028-06-01',owner:'עידן',priority:'med',notes:'2-4 שנים אחרי אכלוס',done:false},
+  {desc:'לרכוש פינת ישיבה למרפסת',phase:4,date:'2028-03-01',owner:'שניכם',priority:'low',notes:'',done:false},
+  {desc:'לבדוק ולתקן ליקויים שנמצאו',phase:4,date:'2028-03-01',owner:'עידן',priority:'high',notes:'תוך 60 יום ממסירה',done:false},
+];
+
+// Firebase tasks
+refTasks.once('value').then(snap => {
+  const val = snap.val();
+  if (!val || !Array.isArray(val) || val.length === 0) {
+    refTasks.set(DEFAULT_TASKS).then(() => { TASKS = JSON.parse(JSON.stringify(DEFAULT_TASKS)); renderTasks(); });
+  } else { TASKS = val; renderTasks(); }
+});
+refTasks.on('value', snap => {
+  const val = snap.val();
+  if (val && Array.isArray(val)) {
+    TASKS = val;
+    if (!tasksConnected) { tasksConnected = true; }
+    const wasLocal = localChange;
+    localChange = false;
+    if (!wasLocal) renderTasks();
+  }
+});
+
+function pushTasks() {
+  localChange = true;
+  setSyncStatus('syncing','שומר...');
+  refTasks.set(TASKS)
+    .then(()=>{ setSyncStatus('connected','נשמר ✓'); setTimeout(()=>setSyncStatus('connected','מסונכרן ✓'),2000); })
+    .catch(err=>{ localChange=false; setSyncStatus('','שגיאת שמירה'); showToast('⚠️ שגיאה: '+err.message); });
+}
+
+// Task Sheet
+function openTaskSheet(idx) {
+  editingTaskIdx = idx;
+  const isEdit = idx !== null;
+  document.getElementById('taskSheetTitle').textContent = isEdit ? '✏️ עריכת משימה' : '✅ משימה חדשה';
+  document.getElementById('taskSaveBtn').textContent = isEdit ? 'שמור שינויים' : 'שמור משימה';
+  if (isEdit) {
+    const t = TASKS[idx];
+    document.getElementById('tf-desc').value = t.desc||'';
+    document.getElementById('tf-phase').value = t.phase||3;
+    document.getElementById('tf-date').value = t.date||'';
+    document.getElementById('tf-owner').value = t.owner||'שניכם';
+    document.getElementById('tf-priority').value = t.priority||'med';
+    document.getElementById('tf-notes').value = t.notes||'';
+    document.getElementById('tf-link').value = t.link||'';
+  } else {
+    ['tf-desc','tf-date','tf-notes','tf-link'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('tf-phase').value='3';
+    document.getElementById('tf-owner').value='שניכם';
+    document.getElementById('tf-priority').value='med';
+  }
+  document.getElementById('taskOverlay').classList.add('open');
+  document.getElementById('taskSheet').classList.add('open');
+}
+function closeTaskSheet() {
+  document.getElementById('taskOverlay').classList.remove('open');
+  document.getElementById('taskSheet').classList.remove('open');
+  editingTaskIdx = null;
+}
+function saveTask() {
+  const desc = document.getElementById('tf-desc').value.trim();
+  if (!desc) { showToast('⚠️ חובה להכניס תיאור'); return; }
+  const task = {
+    desc, phase: parseInt(document.getElementById('tf-phase').value),
+    date: document.getElementById('tf-date').value,
+    owner: document.getElementById('tf-owner').value,
+    priority: document.getElementById('tf-priority').value,
+    notes: document.getElementById('tf-notes').value.trim(),
+    link: document.getElementById('tf-link').value.trim(),
+    done: editingTaskIdx !== null ? TASKS[editingTaskIdx].done : false
+  };
+  if (editingTaskIdx !== null) { TASKS[editingTaskIdx] = task; showToast('✏️ משימה עודכנה'); }
+  else { TASKS.push(task); showToast('✅ משימה נוספה'); }
+  pushTasks(); closeTaskSheet();
+}
+function askDeleteTask(idx) {
+  pendingDeleteTaskIdx = idx;
+  document.getElementById('confirmTaskText').textContent = 'האם למחוק את המשימה "'+TASKS[idx].desc+'"?';
+  document.getElementById('confirmTaskOverlay').classList.add('open');
+}
+function closeConfirmTask() { document.getElementById('confirmTaskOverlay').classList.remove('open'); pendingDeleteTaskIdx=null; }
+function confirmDeleteTask() {
+  if (pendingDeleteTaskIdx===null) return;
+  const name = TASKS[pendingDeleteTaskIdx].desc;
+  TASKS.splice(pendingDeleteTaskIdx,1);
+  pushTasks(); closeConfirmTask();
+  showToast('🗑️ "'+name+'" נמחקה');
+}
+
+function isOverdue(dateStr) {
+  if (!dateStr) return false;
+  return new Date(dateStr) < new Date() && true;
+}
+
+function fmtDate(d) {
+  if (!d) return '';
+  const [y,m,day] = d.split('-');
+  return day+'/'+m+'/'+y;
+}
+
+function renderTasksDashboard() {
+  const total = TASKS.length;
+  const done = TASKS.filter(t=>t.done).length;
+  const pct = total>0?Math.round(done/total*100):0;
+  const high = TASKS.filter(t=>!t.done && t.priority==='high').length;
+  const overdue = TASKS.filter(t=>!t.done && isOverdue(t.date)).length;
+  document.getElementById('tasks-dashboard').innerHTML =
+    '<div class="tasks-dash-card" style="border-top:3px solid var(--green)"><div class="tasks-dash-num">'+done+'/'+total+'</div><div class="tasks-dash-lbl">הושלמו</div><div class="pbar" style="margin-top:6px"><div class="pbar-fill" style="width:'+pct+'%"></div></div></div>'
+    +'<div class="tasks-dash-card" style="border-top:3px solid var(--red)"><div class="tasks-dash-num">'+high+'</div><div class="tasks-dash-lbl">🔴 דחופות</div></div>'
+    +'<div class="tasks-dash-card" style="border-top:3px solid var(--yellow)"><div class="tasks-dash-num">'+overdue+'</div><div class="tasks-dash-lbl">⚠️ באיחור</div></div>';
+  renderUrgentTasks();
+}
+
+
+function renderUrgentTasks() {
+  const block = document.getElementById('urgent-tasks-block');
+  if (!block) return;
+
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  // מיון: קודם לפי תאריך (הכי קרוב), אחר כך עדיפות
+  const priorityScore = {high:0, med:1, low:2};
+  const urgent = TASKS
+    .map((t,i) => Object.assign({},t,{_idx:i}))
+    .filter(t => !t.done)
+    .sort((a,b) => {
+      // עדיפות ראשית: תאריך עבר / קרוב
+      const da = a.date ? new Date(a.date) : new Date('2099-01-01');
+      const db2 = b.date ? new Date(b.date) : new Date('2099-01-01');
+      if (da - db2 !== 0) return da - db2;
+      // משני: עדיפות
+      return (priorityScore[a.priority]||1) - (priorityScore[b.priority]||1);
+    })
+    .slice(0,3);
+
+  if (urgent.length === 0) { block.innerHTML = ''; return; }
+
+  let html2 = '<div style="background:var(--card);border-radius:14px;box-shadow:var(--shadow);overflow:hidden">'
+    +'<div style="padding:12px 14px;border-bottom:3px solid var(--red);display:flex;align-items:center;justify-content:space-between">'
+    +'<div style="font-weight:700;font-size:.9rem">🔥 3 המשימות הדחופות ביותר</div>'
+    +'<div style="font-size:.7rem;color:var(--muted)">נכון להיום</div></div>';
+
+  urgent.forEach((t,rank) => {
+    const overdue = t.date && new Date(t.date) < today;
+    const phaseCfg = PHASE_CONFIG[t.phase] || {emoji:'📋',color:'#6b7280'};
+    const rankColors = ['#ef4444','#f59e0b','#3b82f6'];
+    const priLabel = t.priority==='high'?'🔴 דחוף':t.priority==='low'?'🟢 נמוך':'🟡 בינוני';
+    html2 += '<div style="display:flex;align-items:flex-start;padding:11px 14px;border-top:1px solid var(--border);gap:10px">'
+      +'<div style="width:24px;height:24px;border-radius:50%;background:'+rankColors[rank]+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:900;flex-shrink:0;margin-top:1px">'+(rank+1)+'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:.85rem;font-weight:600;line-height:1.3">'+t.desc+'</div>'
+      +'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">'
+      +'<span style="font-size:.62rem;padding:2px 7px;border-radius:10px;font-weight:600;background:#eff6ff;color:'+phaseCfg.color+'">'+phaseCfg.emoji+' שלב '+t.phase+'</span>'
+      +'<span style="font-size:.62rem;padding:2px 7px;border-radius:10px;font-weight:600;background:#f3f4f6;color:var(--muted)">'+t.owner+'</span>'
+      +(t.date?'<span style="font-size:.62rem;padding:2px 7px;border-radius:10px;font-weight:600;background:'+(overdue?'#fee2e2':'#f3f4f6')+';color:'+(overdue?'#dc2626':'var(--muted)')+'">📅 '+fmtDate(t.date)+(overdue?' ⚠️ באיחור':'')+'</span>':'')
+      +'<span style="font-size:.62rem;padding:2px 7px;border-radius:10px;font-weight:600;background:#f3f4f6;color:var(--muted)">'+priLabel+'</span>'
+      +'</div></div>'
+      +(t.link?'<a class="icon-btn" href="'+t.link+'" target="_blank" style="text-decoration:none" onclick="event.stopPropagation()">🔗</a>':'')
+      +'<button class="icon-btn" onclick="openTaskSheet('+t._idx+')" style="flex-shrink:0">✏️</button>'
+      +'</div>';
+  });
+
+  html2 += '</div>';
+  block.innerHTML = html2;
+}
+
+function exportTasksExcel() {
+  if (typeof XLSX === 'undefined') { showToast('⚠️ XLSX לא נטען'); return; }
+  const wb = XLSX.utils.book_new();
+
+  // גיליון 1 — כל המשימות
+  const rows = [['שלב','תיאור','אחראי','עדיפות','תאריך יעד','סטטוס','הערות']];
+  const phaseNames = {1:'שלב 1 — חתימה',2:'שלב 2 — בנייה',3:'שלב 3 — לפני מסירה',4:'שלב 4 — אחרי מסירה'};
+  const priNames = {high:'גבוהה',med:'בינונית',low:'נמוכה'};
+  TASKS.forEach(t => {
+    rows.push([
+      phaseNames[t.phase]||'שלב '+t.phase,
+      t.desc, t.owner,
+      priNames[t.priority]||t.priority,
+      t.date||'',
+      t.done?'הושלם':'ממתין',
+      t.notes||''
+    ]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:22},{wch:38},{wch:10},{wch:10},{wch:13},{wch:10},{wch:35}];
+  XLSX.utils.book_append_sheet(wb, ws, 'כל המשימות');
+
+  // גיליון 2 — סיכום לפי שלב
+  const sumRows = [['שלב','סה"כ משימות','הושלמו','נותרו','% השלמה']];
+  [1,2,3,4].forEach(phase => {
+    const pt = TASKS.filter(t=>t.phase===phase);
+    const done = pt.filter(t=>t.done).length;
+    sumRows.push([phaseNames[phase], pt.length, done, pt.length-done, pt.length>0?Math.round(done/pt.length*100)+'%':'0%']);
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(sumRows);
+  ws2['!cols'] = [{wch:24},{wch:14},{wch:10},{wch:10},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'סיכום לפי שלב');
+
+  // גיליון 3 — משימות דחופות
+  const urgRows = [['דירוג','תיאור','שלב','אחראי','תאריך יעד','עדיפות']];
+  const today = new Date(); today.setHours(0,0,0,0);
+  const ps = {high:0,med:1,low:2};
+  TASKS.map((t,i)=>Object.assign({},t,{_idx:i}))
+    .filter(t=>!t.done)
+    .sort((a,b)=>{
+      const da=a.date?new Date(a.date):new Date('2099-01-01');
+      const db2=b.date?new Date(b.date):new Date('2099-01-01');
+      if(da-db2!==0)return da-db2;
+      return (ps[a.priority]||1)-(ps[b.priority]||1);
+    })
+    .slice(0,10)
+    .forEach((t,i)=>urgRows.push([i+1,t.desc,phaseNames[t.phase]||'',t.owner,t.date||'',priNames[t.priority]||'']));
+  const ws3 = XLSX.utils.aoa_to_sheet(urgRows);
+  ws3['!cols'] = [{wch:8},{wch:38},{wch:22},{wch:10},{wch:13},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws3, 'משימות דחופות');
+
+  const d = new Date();
+  XLSX.writeFile(wb, 'משימות_דירה_'+d.getDate()+'-'+(d.getMonth()+1)+'-'+d.getFullYear()+'.xlsx');
+  showToast('📊 Excel יוצא בהצלחה!');
+}
+
+function renderTasks() {
+  renderTasksDashboard();
+  const container = document.getElementById('tasks-container');
+  if (!container) return;
+  container.innerHTML = '';
+  [1,2,3,4].forEach(phase => {
+    const cfg = PHASE_CONFIG[phase];
+    const phaseTasks = TASKS.map((t,i)=>Object.assign({},t,{_idx:i})).filter(t=>t.phase===phase);
+    const done = phaseTasks.filter(t=>t.done).length;
+    const pct = phaseTasks.length>0?Math.round(done/phaseTasks.length*100):0;
+    const isOpen = taskPhaseOpen[phase];
+
+    const block = document.createElement('div'); block.className='task-phase-block';
+    const hdr = document.createElement('div'); hdr.className='task-phase-header'; hdr.style.borderBottomColor=cfg.color;
+    hdr.innerHTML =
+      '<div class="task-phase-left">'
+      +'<span class="task-phase-emoji">'+cfg.emoji+'</span>'
+      +'<div class="task-phase-info">'
+      +'<div class="task-phase-name" style="color:'+cfg.color+'">'+cfg.name+'</div>'
+      +'<div class="task-phase-sub">יעד: '+cfg.target+'</div></div></div>'
+      +'<div class="task-phase-right">'
+      +'<div class="task-phase-pct" style="color:'+cfg.color+'">'+pct+'%</div>'
+      +'<div class="task-phase-count">'+done+'/'+phaseTasks.length+'</div>'
+      +'<div class="task-phase-pbar"><div class="task-phase-pbar-fill" style="width:'+pct+'%;background:'+cfg.color+'"></div></div>'
+      +'</div>'
+      +'<span class="task-phase-toggle'+(isOpen?' open':'')+'">▾</span>';
+    hdr.addEventListener('click', ()=>{taskPhaseOpen[phase]=!taskPhaseOpen[phase];renderTasks();});
+
+    const body = document.createElement('div'); body.className='task-phase-body'+(isOpen?' open':'');
+
+    phaseTasks.forEach(t => {
+      const idx = t._idx;
+      const overdue = !t.done && isOverdue(t.date);
+      const row = document.createElement('div'); row.className='task-row';
+
+      const chk = document.createElement('div'); chk.className='task-chk'+(t.done?' on':''); chk.textContent=t.done?'✓':'';
+      chk.addEventListener('click', e=>{
+        e.stopPropagation();
+        TASKS[idx].done=!TASKS[idx].done;
+        chk.className='task-chk'+(TASKS[idx].done?' on':'');
+        chk.textContent=TASKS[idx].done?'✓':'';
+
+        row.style.opacity=TASKS[idx].done?'0.5':'1';
+        pushTasks();
+      });
+
+      const info = document.createElement('div'); info.className='task-info';
+      const nm = document.createElement('div'); nm.className='task-name'+(t.done?' done':''); nm.textContent=t.desc;
+
+      const meta = document.createElement('div'); meta.className='task-meta';
+      // priClass + priLabel defined below
+      const priClass = t.priority==='high'?'badge-high':t.priority==='low'?'badge-low':'badge-med';
+      const priLabel = t.priority==='high'?'🔴 דחוף':t.priority==='low'?'🟢 נמוך':'🟡 בינוני';
+      meta.innerHTML = '<span class="task-badge '+priClass+'">'+priLabel+'</span>'
+        +'<span class="task-badge badge-owner">'+t.owner+'</span>'
+        +(t.date?'<span class="task-badge '+(overdue?'badge-overdue':'badge-date')+'">📅 '+fmtDate(t.date)+(overdue?' ⚠️':'')+'</span>':'')
+        +(t.notes?'<span class="task-badge badge-date">💬</span>':'');
+
+      info.appendChild(nm); info.appendChild(meta);
+      const actions = document.createElement('div'); actions.className='task-actions';
+      if (t.link) {
+        const lb = document.createElement('a'); lb.className='icon-btn'; lb.textContent='🔗';
+        lb.href=t.link; lb.target='_blank'; lb.title='פתח מסמך';
+        lb.style.textDecoration='none'; lb.addEventListener('click',e=>e.stopPropagation()); actions.appendChild(lb);
+      }
+      const eb = document.createElement('button'); eb.className='icon-btn'; eb.textContent='✏️';
+      eb.addEventListener('click',e=>{e.stopPropagation();openTaskSheet(idx);});
+      const delBtnT = document.createElement('button'); delBtnT.className='icon-btn del'; delBtnT.textContent='🗑️';
+      delBtnT.addEventListener('click',e=>{e.stopPropagation();askDeleteTask(idx);});
+      actions.appendChild(eb); actions.appendChild(delBtnT);
+      row.appendChild(chk); row.appendChild(info); row.appendChild(actions);
+      if (t.done) row.style.opacity='0.5';
+      body.appendChild(row);
+    });
+
+    // כפתור הוספת משימה בתוך שלב
+    const addBtn = document.createElement('button'); addBtn.className='task-add-btn';
+    addBtn.textContent='＋ הוסף משימה לשלב '+(phase);
+    addBtn.addEventListener('click',()=>{
+      openTaskSheet(null);
+      setTimeout(()=>document.getElementById('tf-phase').value=phase,100);
+    });
+    body.appendChild(addBtn);
+    block.appendChild(hdr); block.appendChild(body); container.appendChild(block);
+  });
+}
+
+</script>
+</body>
+</html>
