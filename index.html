@@ -204,6 +204,17 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--ink);paddin
 .k-item-cat{font-size:.68rem;color:var(--muted)}
 .k-cat-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 
+.dash-card.c-yellow{border-top:3px solid var(--yellow)}
+.dash-card.c-blue{border-top:3px solid #3b82f6}
+.savings-widget{background:var(--card);border-radius:14px;padding:14px;box-shadow:var(--shadow);margin-bottom:12px}
+.savings-title{font-size:.85rem;font-weight:700;color:var(--ink);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.savings-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.savings-label{font-size:.75rem;color:var(--muted);min-width:110px}
+.savings-val{font-size:.9rem;font-weight:700;color:var(--ink)}
+.savings-val.highlight{color:#3b82f6;font-size:1rem}
+.savings-input{padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:.85rem;background:var(--card);color:var(--ink);width:130px;text-align:left}
+.savings-input:focus{outline:none;border-color:#3b82f6}
+.months-badge{background:#eff6ff;color:#3b82f6;border-radius:8px;padding:3px 8px;font-size:.72rem;font-weight:600}
 </style>
 </head>
 <body>
@@ -221,6 +232,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--ink);paddin
   <div id="loadingScreen" class="loading"><div class="spinner"></div><div>מתחבר...</div></div>
   <div id="appContent" style="display:none">
     <div class="dash-grid" id="dashboard"></div>
+  <div class="savings-widget" id="savings-widget"></div>
     <div class="grand-bar" id="grandTotal"></div>
 
     <div class="filter-bar">
@@ -881,7 +893,7 @@ function getFiltered() {
 }
 
 // ── Render ────────────────────────────────────────────────────────────
-function fmtK(n){if(n===null||n===undefined||n==='')return'—';const abs=Math.abs(n);const s=abs>=10000?Math.round(abs/1000)+'K':Math.round(abs).toLocaleString('he-IL');return(n<0?'−':'')+s+'₪';}
+function fmtK(n){if(n===null||n===undefined||n==='')return'—';const s=Math.round(Math.abs(n)).toLocaleString('he-IL');return(n<0?'−':'')+s+'₪';}
 function fmtFull(n){if(n===null||n===undefined)return'—';return Math.round(n).toLocaleString('he-IL')+'₪';}
 function remClass(r){return r>0?'pos':r<0?'neg':'zero';}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
@@ -899,6 +911,7 @@ function renderDashboard() {
     +'<div class="dash-card c-yellow"><div class="dash-num">'+done+'/'+DATA.length+'</div><div class="dash-label">פריטים הושלמו</div></div>';
   document.getElementById('headerStats').textContent=pct+'% שולם';
   document.getElementById('itemCount').textContent='סה"כ '+DATA.length+' פריטים ב-'+[...new Set(DATA.map(i=>i.cat))].length+' קטגוריות';
+  renderSavings();
 }
 
 function renderGrand(filtered) {
@@ -1551,6 +1564,76 @@ function testFirebaseConnection(){
       resultEl.textContent = '❌ שגיאה: '+err.message;
       resultEl.style.color = 'var(--red)';
     });
+}
+
+
+// ── Savings Calculator ──────────────────────────────────────────
+const MOVE_IN_DATE = new Date('2027-08-01');
+
+function getSavingsData() {
+  try {
+    const d = localStorage.getItem('savingsData');
+    return d ? JSON.parse(d) : { available: 0 };
+  } catch(e) { return { available: 0 }; }
+}
+
+function saveSavingsData(data) {
+  try { localStorage.setItem('savingsData', JSON.stringify(data)); } catch(e) {}
+}
+
+function renderSavings() {
+  const widget = document.getElementById('savings-widget');
+  if (!widget) return;
+
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const msPerMonth = 1000 * 60 * 60 * 24 * 30.44;
+  const monthsLeft = Math.max(0, Math.ceil((MOVE_IN_DATE - today) / msPerMonth));
+  const totalRem = DATA.reduce((s,i) => s + (i.price||0), 0) - DATA.reduce((s,i) => s + (i.paid||0), 0);
+  const sd = getSavingsData();
+  const available = sd.available || 0;
+  const stillNeeded = Math.max(0, totalRem - available);
+  const perMonth = monthsLeft > 0 ? Math.ceil(stillNeeded / monthsLeft) : stillNeeded;
+
+  // בנה widget רק אם לא קיים עדיין
+  if (!document.getElementById('savings-available')) {
+    widget.innerHTML =
+      '<div class="savings-title">💰 תכנון חיסכון לאכלוס — 01/08/2027</div>'
+      + '<div class="savings-row"><span class="savings-label">📅 חודשים שנותרו</span><span class="savings-val"><span class="months-badge" id="sv-months"></span></span></div>'
+      + '<div class="savings-row"><span class="savings-label">💸 נותר לתשלום</span><span class="savings-val" id="sv-rem"></span></div>'
+      + '<div class="savings-row"><span class="savings-label">🏦 כסף זמין עכשיו</span>'
+      + '<input type="number" class="savings-input" id="savings-available" placeholder="0" oninput="updateSavings(this.value)"></div>'
+      + '<div class="savings-row"><span class="savings-label">⚠️ עוד צריך לחסוך</span><span class="savings-val" id="sv-needed"></span></div>'
+      + '<div style="border-top:1px solid var(--border);margin:8px 0"></div>'
+      + '<div class="savings-row"><span class="savings-label">📊 חיסכון חודשי נדרש</span><span class="savings-val highlight" id="sv-monthly"></span></div>';
+    document.getElementById('savings-available').value = available || '';
+  }
+
+  // עדכן רק ערכים — בלי לגעת בשדה הקלט
+  const elMonths  = document.getElementById('sv-months');
+  const elRem     = document.getElementById('sv-rem');
+  const elNeeded  = document.getElementById('sv-needed');
+  const elMonthly = document.getElementById('sv-monthly');
+  if (elMonths)  elMonths.textContent  = monthsLeft + ' חודשים';
+  if (elRem)     elRem.textContent     = '₪' + Math.round(totalRem).toLocaleString();
+  if (elNeeded)  elNeeded.textContent  = '₪' + Math.round(stillNeeded).toLocaleString();
+  if (elMonthly) elMonthly.textContent = '₪' + perMonth.toLocaleString() + ' / חודש';
+}
+
+function updateSavings(val) {
+  const available = parseFloat(val) || 0;
+  saveSavingsData({ available });
+  // עדכן ערכים בלי לבנות מחדש (שלא יאבד הפוקוס)
+  const today = new Date(); today.setHours(0,0,0,0);
+  const msPerMonth = 1000 * 60 * 60 * 24 * 30.44;
+  const monthsLeft = Math.max(0, Math.ceil((MOVE_IN_DATE - today) / msPerMonth));
+  const totalRem = DATA.reduce((s,i) => s + (i.price||0), 0) - DATA.reduce((s,i) => s + (i.paid||0), 0);
+  const stillNeeded = Math.max(0, totalRem - available);
+  const perMonth = monthsLeft > 0 ? Math.ceil(stillNeeded / monthsLeft) : stillNeeded;
+  const elNeeded  = document.getElementById('sv-needed');
+  const elMonthly = document.getElementById('sv-monthly');
+  if (elNeeded)  elNeeded.textContent  = '₪' + Math.round(stillNeeded).toLocaleString();
+  if (elMonthly) elMonthly.textContent = '₪' + perMonth.toLocaleString() + ' / חודש';
 }
 
 function renderAll() {
