@@ -62,7 +62,165 @@
       .then(r => { delete seeding[name]; return r; });
     return seeding[name];
   }
-  function seed() { return Promise.all([seedNode('contract', contractSeed), seedNode('mortgage', mortgageSeed)]); }
+  function seed() { return Promise.all([seedNode('contract', contractSeed), seedNode('mortgage', mortgageSeed)]).then(r => r); }
+  // ═══ Index engine (v2.3) — the user's own method (see his sheet "חישוב תשלום מדד תשומות בניה") ═══
+  // CBS "מדד מחירי תשומה בבנייה למגורים" id 200010. Base 2011 up to 07/2025, new base Jul-2025=100 from 08/2025.
+  // chain value (2011-base equivalent) = v (2011) | v × 1.387 (new base). User's points scale = v × 2.709502 (2011) | v × 3.758128 (new).
+  const IX = { LINK: 1.387, F_OLD: 2.709502, F_NEW: 3.758128, LS: 'py.cbs.lastFetch', THROTTLE: 6 * 3600e3, TIMEOUT: 6000,
+    URL: 'https://api.cbs.gov.il/index/data/price?id=200010&format=json&download=false&startPeriod=01-2025&endPeriod=12-2030&lang=he' };
+  const IX_FALLBACK = (() => {
+    const p = {};
+    [['2025-01', 137.1], ['2025-02', 137.7], ['2025-03', 138.2], ['2025-04', 138.4], ['2025-05', 138.6], ['2025-06', 138.6], ['2025-07', 138.7]].forEach(([k, v]) => { p[k] = { v, base: '2011' }; });
+    [['2025-08', 100.4], ['2025-09', 100.4], ['2025-10', 100.5], ['2025-11', 101.1], ['2025-12', 101.2], ['2026-01', 101.3], ['2026-02', 101.5],
+      ['2026-03', 101.7], ['2026-04', 102.8], ['2026-05', 103.4], ['2026-06', 103.6], ['2026-07', 103.5], ['2026-08', 103.9]].forEach(([k, v]) => { p[k] = { v, base: '2025' }; });
+    return { source: 'seed', latestMonth: '2026-08', updatedAt: 0, points: p };
+  })();
+  function indexRowsSeed() {
+    return {
+      r1: { payDate: '2025-04-02', amount: 330000, paymentKey: 'p1', notes: 'חשבונית 18304' },
+      r2: { payDate: '2025-06-11', amount: 700000, paymentKey: 'p2', indexMonth: '2025-05', indexValue: 375.537, exposedAfter: 380000, notes: 'חשבונית 18673' },
+      r3: { payDate: '2025-12-25', amount: 65000, paymentKey: 'p3', indexMonth: '2025-11', indexValue: 379.942, exposedAfter: 315000, due: 4457, notes: 'חשבונית 19513' },
+      r4: { payDate: '2026-03-11', amount: 52500, paymentKey: 'p4', indexMonth: '2026-02', indexValue: 381.45, exposedAfter: 262500, due: 1246, notes: 'חשבונית 19915' },
+    };
+  }
+  function extrasSeed() {
+    return { x1: { title: "חשבון שינויים מס' 1", amount: 8707, date: '2026-01-07', indexBaseMonth: '2025-11', linked: true, dueAt: 'delivery',
+      financedByMortgage: true, paid: false, docTitle: "חשבון שינויים מס' 1- בניין 6 דירה 24", notes: '8,020 − 8% הנחה = 7,378.40 + מע"מ 18%. תשלומו תנאי לקבלת החזקה.' } };
+  }
+  const DELIVERY_EXT = { to: '2028-03-03', note: 'חשבון שינויים מס\' 1: החברה רשאית לדחות את המסירה ב-63 ימי עבודה בגלל שינויי הדיירים' };
+
+  // sub-node seeds under contract — only when contract exists, node is null and flag not set
+  function subSeed(flagName, path, make) {
+    if (seeding[flagName]) return seeding[flagName];
+    const flag = MH.db.ref('meta/seeded/' + flagName);
+    seeding[flagName] = flag.once('value').then(s => {
+      if (s.val() === true || !C) return false;
+      return MH.db.ref(path).transaction(cur => (cur === null || cur === undefined) ? make() : undefined)
+        .then(() => flag.transaction(cur => cur === true ? undefined : true)).then(() => true);
+    }).catch(e => { console.error('[payments] seed ' + flagName, e); return false; })
+      .then(r => { delete seeding[flagName]; return r; });
+    return seeding[flagName];
+  }
+  function seedContractExtras() {
+    return Promise.all([
+      subSeed('indexRows', 'contract/indexRows', indexRowsSeed),
+      subSeed('indexSeries', 'contract/indexSeries', () => JSON.parse(JSON.stringify(IX_FALLBACK))),
+      subSeed('extras', 'contract/extras', extrasSeed),
+      subSeed('deliveryExt', 'contract/deliveryExtendedTo', () => DELIVERY_EXT.to)
+        .then(r => r && MH.db.ref('contract/deliveryExtensionNote').transaction(cur => cur == null ? DELIVERY_EXT.note : undefined)),
+    ]);
+  }
+
+  // ── month helpers ──
+  const mkey = iso => String(iso || '').slice(0, 7);
+  function addMonthKey(k, n) { const [y, m] = k.split('-').map(Number); const t = new Date(y, m - 1 + n, 1); return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0'); }
+  const prevMonthKey = iso => addMonthKey(mkey(iso), -1);                 // index month for a payment = month before payment
+  function monthDiff(a, b) { const [ya, ma] = a.split('-').map(Number), [yb, mb] = b.split('-').map(Number); return (yb - ya) * 12 + (mb - ma); }
+  const monthLabel = k => k ? k.slice(5, 7) + '/' + k.slice(0, 4) : '';
+
+  function seriesObj() { const s = C && C.indexSeries; return (s && s.points && typeof s.points === 'object') ? s : IX_FALLBACK; }
+  function seriesPoints() { return Object.assign({}, IX_FALLBACK.points, seriesObj().points); }
+  function indexModel(mm) {
+    const c = mm.c, S = seriesPoints(), months = Object.keys(S).sort();
+    const chain = k => (k && S[k] && num(S[k].v) != null) ? (S[k].base === '2011' ? S[k].v : S[k].v * IX.LINK) : null;
+    const userOf = k => (k && S[k]) ? S[k].v * (S[k].base === '2011' ? IX.F_OLD : IX.F_NEW) : null;
+    const rows = entries(c.indexRows).sort((a, b) => String(a.payDate).localeCompare(String(b.payDate)) || a._key.localeCompare(b._key));
+    let prev = null, past = 0;
+    rows.forEach(r => {
+      r._month = r.indexMonth || null;
+      r._cbs = r._month && S[r._month] ? S[r._month].v : null;
+      r._user = num(r.indexValue) != null ? num(r.indexValue) : userOf(r._month);
+      r._rise = null; r._due = null; r._exposedBefore = null;
+      if (!r._month) { r._exposedAfter = null; return; }
+      if (!prev) { r._exposedAfter = num(r.exposedAfter) != null ? num(r.exposedAfter) : mm.share * (num(r.amount) || 0); prev = r; return; }
+      const a = chain(prev._month), b = chain(r._month);
+      const ratio = (a && b) ? b / a : (prev._user && r._user ? r._user / prev._user : null);
+      r._exposedBefore = prev._exposedAfter;
+      r._rise = ratio != null ? ratio - 1 : null;
+      r._due = ratio != null ? Math.max(0, r._exposedBefore * (ratio - 1)) : null;   // decreases don't reduce the price
+      past += r._due || 0;
+      r._exposedAfter = num(r.exposedAfter) != null ? num(r.exposedAfter) : Math.max(0, r._exposedBefore - (num(r.amount) || 0));
+      prev = r;
+    });
+    const L = months[months.length - 1] || null;
+    const B = prev ? prev._month : null, exposed = prev ? prev._exposedAfter : 0;
+    const cL = chain(L), cB = chain(B);
+    const accruedCurrent = (cL && cB) ? exposed * Math.max(0, cL / cB - 1) : 0;
+    // average monthly rise: geometric mean of the last 12 monthly changes (fewer if the series is shorter)
+    let n = 12; while (n > 0 && !chain(addMonthKey(L, -n))) n--;
+    const m = (n > 0 && cL) ? Math.pow(cL / chain(addMonthKey(L, -n)), 1 / n) - 1 : 0;
+    const finalInst = mm.inst.filter(i => i._rem > 0).sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate))).pop();
+    const projMonth = prevMonthKey(finalInst ? finalInst.dueDate : (c.deliveryDate || '2027-12-31'));
+    let lateMonth = prevMonthKey(c.deliveryExtendedTo || DELIVERY_EXT.to);
+    if (lateMonth <= projMonth) lateMonth = addMonthKey(projMonth, 3);
+    const projChain = k => cL ? cL * Math.pow(1 + m, Math.max(0, monthDiff(L, k))) : null;
+    const pC = projChain(projMonth), pCL = projChain(lateMonth);
+    const projDiffLast = (pC && cB) ? exposed * Math.max(0, pC / cB - 1) : 0;
+    const projDiffLate = (pCL && cB) ? exposed * Math.max(0, pCL / cB - 1) : 0;
+    const paidPast = !!c.indexDiffPaid;
+    const sObj = seriesObj();
+    const curMonth = mkey(MH.todayISO());
+    return {
+      rows, S, chain, userOf, latestMonth: L, latestValueCbs: L ? S[L].v : null, latestValueUser: userOf(L),
+      baseMonth: B, exposed, accruedPast: past, accruedCurrent, accruedTotal: past + accruedCurrent, avgMonthly: m, avgAnnual: Math.pow(1 + m, 12) - 1,
+      projMonth, lateMonth, projChain: pC, projIndexUser: pC ? pC * IX.F_NEW / IX.LINK : null, projIndexCbs: pC ? pC / IX.LINK : null,
+      projDiffLast, projectedTotal: past + projDiffLast, projectedTotalLate: past + projDiffLate, paidPast,
+      toPayNow: (paidPast ? 0 : past) + accruedCurrent, toPayProjected: (paidPast ? 0 : past) + projDiffLast,
+      updatedAt: sObj.updatedAt || null, source: sObj.source || 'seed',
+      stale: !!ui.fetchFailed || !L || monthDiff(L, curMonth) > 2,
+    };
+  }
+  function extrasModel(im) {
+    return entries(C && C.extras).sort((a, b) => String(a.date).localeCompare(String(b.date))).map(x => {
+      const base = im.chain(x.indexBaseMonth);
+      x._ixProj = (x.linked && base && im.projChain) ? Math.max(0, (num(x.amount) || 0) * (im.projChain / base - 1)) : 0;
+      x._ixNow = (x.linked && base && im.chain(im.latestMonth)) ? Math.max(0, (num(x.amount) || 0) * (im.chain(im.latestMonth) / base - 1)) : 0;
+      return x;
+    });
+  }
+
+  // ── CBS auto-update (≤ once per 6h per device, 6s timeout, forward-only write) ──
+  function parseCbs(j) {
+    const arr = j && j.month && j.month[0] && j.month[0].date;
+    if (!Array.isArray(arr) || !arr.length) throw new Error('CBS: unexpected format');
+    const points = {};
+    arr.forEach(d => {
+      const y = Number(d.year), mo = Number(d.month), v = num(d.currBase && d.currBase.value);
+      if (!y || !mo || v == null) return;
+      points[y + '-' + String(mo).padStart(2, '0')] = { v, base: /2011/.test(String(d.currBase.baseDesc || '')) ? '2011' : '2025' };
+    });
+    const keys = Object.keys(points).sort();
+    if (!keys.length) throw new Error('CBS: no data');
+    return { points, latestMonth: keys[keys.length - 1] };
+  }
+  function writeSeries(s) {
+    if (!C) return Promise.resolve(false);
+    return MH.db.ref('contract/indexSeries').transaction(cur => {
+      if (cur && cur.latestMonth && cur.latestMonth >= s.latestMonth) return;         // only move forward
+      return { updatedAt: Date.now(), source: 'CBS', latestMonth: s.latestMonth, points: Object.assign({}, cur && cur.points, s.points) };
+    }).then(r => !!(r && r.committed));
+  }
+  let ixInflight = null;
+  function refreshIndex(opts) {
+    opts = opts || {};
+    if (!opts.force) { try { const t = Number(localStorage.getItem(IX.LS)) || 0; if (Date.now() - t < IX.THROTTLE) return Promise.resolve('throttled'); } catch (e) {} }
+    if (ixInflight) return ixInflight;
+    ui.fetching = true; MH.refreshIfShown('payments');
+    let timer = null;
+    const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeout = new Promise((_, rej) => { timer = setTimeout(() => { try { ctl && ctl.abort(); } catch (e) {} rej(new Error('timeout')); }, IX.TIMEOUT); });
+    ixInflight = Promise.race([fetch(IX.URL, ctl ? { signal: ctl.signal } : {}), timeout])
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(j => {
+        const s = parseCbs(j);
+        try { localStorage.setItem(IX.LS, String(Date.now())); } catch (e) {}
+        ui.fetchFailed = false; ui.checkedAt = Date.now();
+        return writeSeries(s).then(w => w ? 'updated' : 'current');
+      })
+      .catch(e => { console.warn('[payments] CBS fetch failed', e && e.message); ui.fetchFailed = true; return 'failed'; })
+      .then(res => { clearTimeout(timer); ixInflight = null; ui.fetching = false; ui.lastResult = res; MH.emit('contract'); MH.refreshIfShown('payments'); return res; });
+    return ixInflight;
+  }
 
   // ── writes (granular) ──
   // update() on an existing parent only (contract / mortgage); never recreates a cleared node
@@ -110,11 +268,15 @@
     const remaining = Math.max(0, price - paid);
     const remainingInst = inst.reduce((s, i) => s + i._rem, 0);
     const share = num(c.indexShare) != null ? num(c.indexShare) : 0.5;
-    const base = num(c.baseIndex), cur = num(c.currentIndex);
-    const indexEstimate = (base && cur) ? remainingInst * share * Math.max(0, cur / base - 1) : null;
     const next = inst.find(i => i._rem > 0) || null;
-    return { c, price, pays, inst, orphan, paid, remaining, remainingInst, share, base, cur, indexEstimate, next,
-      pct: price ? paid / price * 100 : 0 };
+    const mm = { c, price, pays, inst, orphan, paid, remaining, remainingInst, share, next, pct: price ? paid / price * 100 : 0 };
+    // single source of truth for indexation: indexModel (old baseIndex/currentIndex/INDEX_PREFILL fields are ignored)
+    mm.ix = indexModel(mm);
+    mm.extras = extrasModel(mm.ix);
+    mm.indexEstimate = C ? mm.ix.toPayNow : null;
+    mm.indexProjection = C ? mm.ix.toPayProjected : null;
+    mm.deliveryLatest = c.deliveryExtendedTo && c.deliveryExtendedTo > (c.deliveryDate || '') ? c.deliveryExtendedTo : (c.deliveryDate || null);
+    return mm;
   }
   function expenseIndexEstimate() {
     try {
@@ -132,14 +294,16 @@
     return Object.assign(l, { end, days, md, state });
   }
   function financing(mm) {
-    const ix = mm.indexEstimate != null ? mm.indexEstimate : (expenseIndexEstimate() || {}).price || 0;
-    const ixSrc = mm.indexEstimate != null ? 'לפי מדדים' : 'לפי הערכה ברשימת ההוצאות';
+    const ix = mm.indexProjection || 0;
+    const ixSrc = 'תחזית ל-' + monthLabel(mm.ix.projMonth) + (mm.ix.paidPast ? ', ללא הפרשים ששולמו' : '');
     const loan = loanInfo();
-    const total = mm.remaining + ix + (Number(loan.amount) || 0);
+    const fx = mm.extras.filter(x => x.financedByMortgage && !x.paid);
+    const extras = fx.reduce((s, x) => s + (num(x.amount) || 0) + x._ixProj, 0);
+    const total = mm.remaining + ix + (Number(loan.amount) || 0) + extras;
     const cash = available();
     const est = Math.max(0, total - cash);
     const target = M && num(M.targetAmount);
-    return { ix, ixSrc, loanAmt: Number(loan.amount) || 0, total, cash, est, target, mortgage: target || est };
+    return { ix, ixSrc, extras, extrasList: fx, loanAmt: Number(loan.amount) || 0, total, cash, est, target, mortgage: target || est };
   }
   function tracksModel() {
     const t = entries(M && M.tracks);
@@ -270,6 +434,20 @@ details.py-det[open]>summary{margin-bottom:10px}
 .py-tr .py-tv{font-size:.72rem;color:var(--muted)}
 .py-tr .py-tp{font-weight:800;font-size:.82rem;text-align:left}
 .py-ttot{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+.py-ixsrc{font-size:.68rem;color:var(--muted);margin:-4px 0 8px}
+.py-fail{color:#b45309;font-weight:700}
+.py-muted{color:var(--muted);font-weight:500}
+.py-ixrows{background:var(--bg);border-radius:10px;padding:2px 10px}
+.py-ixr{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:8px 0;border-top:1px solid var(--border);cursor:pointer;font-size:.74rem}
+.py-ixr:first-child{border-top:none}
+.py-ixr-a{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.py-ixn{color:var(--muted)}
+.py-ixr-due{font-weight:900;text-align:left;white-space:nowrap}
+.py-ixr-b{grid-column:1/-1;font-size:.68rem;color:var(--ink-2);line-height:1.5}
+.py-ixtot{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:2px solid var(--ink);font-size:.78rem;font-weight:800}
+.py-row-btns{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}
+.py-chk{display:flex;align-items:center;gap:8px;font-size:.72rem;min-height:32px;cursor:pointer;flex:1;min-width:0}
+.py-chk input{width:20px;height:20px;flex-shrink:0;accent-color:var(--green)}
 `;
     document.head.appendChild(s);
   }
@@ -292,6 +470,7 @@ details.py-det[open]>summary{margin-bottom:10px}
   function renderContract(mm) {
     const c = mm.c;
     const dDays = MH.daysUntil(c.deliveryDate);
+    const ext = mm.deliveryLatest && mm.deliveryLatest !== c.deliveryDate;
     let h = '<div class="py-sec">🏗️ תשלומים לקבלן<button class="mh-btn sm" data-act="add-pay">＋ תשלום</button></div>';
     h += '<div class="mh-kpis">'
       + '<div class="mh-kpi"><div class="mh-kpi-val">' + money(mm.price) + '</div><div class="mh-kpi-lbl">מחיר הדירה (כולל מע"מ)</div></div>'
@@ -300,7 +479,7 @@ details.py-det[open]>summary{margin-bottom:10px}
       + '<div class="mh-kpi"><div class="mh-kpi-val" style="color:#b91c1c">' + money(mm.remaining) + '</div><div class="mh-kpi-lbl">יתרה לתשלום</div>'
       + '<div class="mh-kpi-sub">+ הפרשי הצמדה</div></div>'
       + '<div class="mh-kpi"><div class="mh-kpi-val">' + (dDays != null ? dDays.toLocaleString('he-IL') : '—') + '</div><div class="mh-kpi-lbl">ימים עד המסירה</div>'
-      + '<div class="py-kpi-date">📅 ' + esc(MH.date(c.deliveryDate)) + ' (+ חודש גרייס)</div></div>'
+      + '<div class="py-kpi-date">📅 חוזי ' + esc(MH.date(c.deliveryDate)) + (ext ? ' · ייתכן עד ' + esc(MH.date(mm.deliveryLatest)) + ' (ארכת שינויי דיירים)' : ' (+ חודש גרייס)') + '</div></div>'
       + '</div>';
 
     // timeline
@@ -321,29 +500,60 @@ details.py-det[open]>summary{margin-bottom:10px}
     if (mm.orphan.length) h += '<div class="mh-sub" style="margin-top:8px">תשלומים ללא שיוך:</div><div class="py-pays">' + mm.orphan.map(payRow).join('') + '</div>';
     h += '<div class="mh-sub" style="margin-top:8px">הקש/י על תשלום כדי לערוך או למחוק.</div></div>';
 
-    // indexation
-    const ex = expenseIndexEstimate();
-    const per1 = mm.remainingInst * mm.share * 0.01;
-    h += '<div class="mh-card"><div class="mh-card-title">📈 הפרשי הצמדה — מדד תשומות הבנייה<button class="mh-btn sm ghost" data-act="edit-index">' + (mm.base && mm.cur ? 'עדכן מדדים' : 'הזן מדדים') + '</button></div>';
-    h += '<div class="mh-note">כל תשלום שנותר צמוד <b>ב-' + Math.round(mm.share * 100) + '%</b> למדד תשומות הבנייה, לעומת <b>מדד בסיס ' + esc(c.baseIndexLabel || '02/2025') + '</b> (פורסם 15/03/2025). '
-      + 'אם המדד עלה — משלמים תוספת על מחצית מהסכום; אם ירד — המחיר <b>לא</b> יורד. תשלומים שכבר שולמו לא מושפעים.</div>';
+    // indexation (user's method)
+    const ix = mm.ix;
+    const pct = (v, d) => v == null ? '—' : (v * 100).toFixed(d == null ? 3 : d) + '%';
+    const pts = v => v == null ? '—' : Number(v).toFixed(3);
+    h += '<div class="mh-card" id="py-index"><div class="mh-card-title">📈 הצמדה למדד תשומות הבנייה<button class="mh-btn sm ghost" data-act="refresh-index"' + (ui.fetching ? ' disabled' : '') + '>' + (ui.fetching ? '⏳ מעדכן…' : '🔄 עדכן מדד') + '</button></div>';
+    h += '<div class="py-ixsrc">' + (ix.source === 'CBS' && ix.updatedAt ? 'עודכן מהלמ"ס: ' + esc(MH.date(new Date(ix.updatedAt).toISOString().slice(0, 10))) : 'נתוני מדד שמורים (עד ' + monthLabel(ix.latestMonth) + ')')
+      + (ui.fetchFailed ? ' · <span class="py-fail">עדכון אוטומטי נכשל — מוצג מדד אחרון שנשמר</span>' : '') + '</div>';
+    h += '<div class="py-ixrows">';
+    ix.rows.forEach(r => {
+      h += '<div class="py-ixr" data-act="edit-ixrow" data-k="' + esc(r._key) + '">'
+        + '<div class="py-ixr-a"><b>' + esc(MH.date(r.payDate)) + '</b> · ' + money(r.amount) + (r.notes ? '<span class="py-ixn"> · ' + esc(r.notes) + '</span>' : '') + '</div>'
+        + '<div class="py-ixr-due">' + (r._due != null ? money(r._due) : (r._month ? '<span class="py-muted">בסיס</span>' : '<span class="py-muted">—</span>')) + '</div>'
+        + '<div class="py-ixr-b">' + (r._month
+          ? 'מדד ' + monthLabel(r._month) + ': <b>' + pts(r._user) + '</b>' + (r._cbs != null ? ' <span class="py-muted">(למ"ס ' + r._cbs + ')</span>' : '')
+            + ' · חשוף ' + money(r._exposedAfter) + (r._rise != null ? ' · עלייה ' + pct(r._rise) : '')
+          : 'לפני תחילת ההצמדה') + '</div></div>';
+    });
+    if (!ix.rows.length) h += '<div class="mh-empty">אין שורות — הוסיפו את התשלומים</div>';
+    h += '<div class="py-ixtot"><span>סה"כ הפרשים שנצברו בתשלומים</span><b>' + money(ix.accruedPast) + '</b></div></div>';
+    h += '<div class="py-row-btns"><button class="mh-btn sm ghost" data-act="add-ixrow">＋ שורה</button>'
+      + '<label class="py-chk"><input type="checkbox" data-act="ix-paid"' + (ix.paidPast ? ' checked' : '') + '> הפרשי ההצמדה שנצברו (' + money(ix.accruedPast) + ') כבר שולמו</label></div>';
     h += '<div class="py-two">'
-      + '<div class="py-box hl"><div class="py-box-l">חישוב לפי מדדים</div><div class="py-box-v">' + (mm.indexEstimate != null ? money(mm.indexEstimate) : '—') + '</div>'
-      + '<div class="py-box-s">' + (mm.base && mm.cur
-        ? 'בסיס ' + esc(mm.base) + ' → ' + esc(mm.cur) + (c.currentIndexLabel ? ' (' + esc(c.currentIndexLabel) + ')' : '') + ' · שינוי ' + ((mm.cur / mm.base - 1) * 100).toFixed(2) + '%'
-        : 'חסרים מדד הבסיס ו/או המדד הנוכחי') + '</div></div>'
-      + '<div class="py-box"><div class="py-box-l">הערכה ברשימת ההוצאות</div><div class="py-box-v">' + (ex ? money(ex.price) : '—') + '</div>'
-      + '<div class="py-box-s">' + (ex && mm.remainingInst ? 'שווה לעלייה של כ-' + (ex.price / (mm.remainingInst * mm.share) * 100).toFixed(1) + '% במדד' : 'לא נמצא פריט "מדד" בהוצאות') + '</div></div>'
+      + '<div class="py-box hl"><div class="py-box-l">נכון לעכשיו · מדד ' + monthLabel(ix.latestMonth) + '</div><div class="py-box-v">' + money(ix.accruedTotal) + '</div>'
+      + '<div class="py-box-s">' + pts(ix.latestValueUser) + ' נק\' (למ"ס ' + (ix.latestValueCbs != null ? ix.latestValueCbs : '—') + ')<br>מאז התשלום האחרון: ' + money(ix.accruedCurrent) + ' על חשוף ' + money(ix.exposed)
+      + (ix.paidPast ? '<br>לתשלום (ללא ששולמו): ' + money(ix.toPayNow) : '') + '</div></div>'
+      + '<div class="py-box"><div class="py-box-l">צפי בתשלום האחרון · מדד ' + monthLabel(ix.projMonth) + '</div><div class="py-box-v">' + money(ix.projectedTotal) + '</div>'
+      + '<div class="py-box-s">מדד צפוי ' + pts(ix.projIndexUser) + ' (למ"ס ' + (ix.projIndexCbs != null ? ix.projIndexCbs.toFixed(1) : '—') + ')<br>אם המסירה תידחה (' + monthLabel(ix.lateMonth) + '): ' + money(ix.projectedTotalLate) + '</div></div>'
       + '</div>';
-    h += '<div class="mh-sub">בסיס החישוב: יתרה לתשלום ' + money(mm.remainingInst) + ' × ' + mm.share + ' × עליית המדד. כל 1% עלייה ≈ <b class="py-num">' + money(per1) + '</b>.</div>';
+    h += '<div class="mh-sub">עלייה חודשית ממוצעת (12 חודשים אחרונים, גיאומטרי): <b>' + pct(ix.avgMonthly) + '</b> · שנתי ≈ <b>' + pct(ix.avgAnnual, 2) + '</b></div>';
+    h += '<div class="mh-note" style="margin-top:8px">שיטת החישוב: מדד כל תשלום = המדד של החודש שלפניו. אחרי התשלום השני 50% מהיתרה (' + money(ix.rows.length ? (ix.rows.find(r => r._month) || {})._exposedAfter : 0) + ') "חשופים" למדד, וכל תשלום נוסף מקטין את החשוף בסכומו המלא. בכל תשלום משלמים: חשוף × (מדד נוכחי ÷ מדד קודם − 1). ירידת מדד לא מקטינה את המחיר.</div>';
+    const ex = expenseIndexEstimate();
+    if (ex) h += '<div class="mh-sub" style="margin-top:6px">ברשימת ההוצאות רשומה הערכה של ' + money(ex.price) + (Math.abs(ex.price - ix.toPayProjected) > 2000 ? ' — צפי לפי השיטה: ' + money(Math.round(ix.toPayProjected / 100) * 100) : ' — תואמת לצפי') + '.</div>';
     h += '<div class="py-warn">⚠️ הערכה בלבד — לאמת מול עו"ד/הקבלן.</div></div>';
+
+    // extras
+    h += '<div class="mh-card" id="py-extras"><div class="mh-card-title">🔧 תשלומים נוספים לקבלן<button class="mh-btn sm ghost" data-act="add-extra">＋ תשלום נוסף</button></div>';
+    mm.extras.forEach(x => {
+      h += '<div class="py-ck' + (x.paid ? ' done' : '') + '"><button class="py-cb' + (x.paid ? ' on' : '') + '" data-act="extra-paid" data-k="' + esc(x._key) + '" aria-label="שולם"><span>' + (x.paid ? '✓' : '') + '</span></button>'
+        + '<div class="mh-grow" data-act="edit-extra" data-k="' + esc(x._key) + '" style="cursor:pointer"><div class="mh-title">' + esc(x.title) + '</div>'
+        + '<div class="mh-sub">' + esc(MH.date(x.date)) + (x.dueAt === 'delivery' ? ' · לתשלום במסירה' : x.dueAt ? ' · עד ' + esc(MH.date(x.dueAt)) : '')
+        + (x.linked ? ' · צמוד מ-' + monthLabel(x.indexBaseMonth) + ' · הצמדה צפויה ' + money(x._ixProj) : '') + '</div>'
+        + '<div class="mh-meta">' + (x.financedByMortgage ? '<span class="mh-badge blue">ימומן במשכנתא</span>' : '') + (x.paid ? '<span class="mh-badge green">שולם</span>' : '') + '</div></div>'
+        + '<div class="py-amt">' + money(x.amount) + '</div></div>';
+    });
+    if (!mm.extras.length) h += '<div class="mh-empty">אין תשלומים נוספים</div>';
+    h += '</div>';
 
     // contract details
     h += '<div class="mh-card"><details class="py-det" data-det="details"' + (ui.details ? ' open' : '') + '><summary>📄 פרטי החוזה</summary><ul class="py-list">'
       + '<li>מוכר: ' + esc(c.seller || 'צרפתי שמעון בע"מ') + '</li>'
       + '<li>נכס: ' + esc(c.project || 'צרפתי בנאות הדרים, באר שבע — מגרש 110, בניין 6, דירה 24') + '</li>'
       + '<li>נחתם: ' + esc(MH.date(c.signDate)) + '</li>'
-      + '<li>מסירה: ' + esc(MH.date(c.deliveryDate)) + ' (סעיף 3.4) + חודש גרייס (3.5) + עיכובים בכוח עליון (3.6). מעבר לכך — פיצוי לפי סעיף 5א לחוק המכר.</li>'
+      + '<li>מסירה: חוזי ' + esc(MH.date(c.deliveryDate)) + ' (סעיף 3.4) + חודש גרייס (3.5) + עיכובים בכוח עליון (3.6). מעבר לכך — פיצוי לפי סעיף 5א לחוק המכר.</li>'
+      + (ext ? '<li>ייתכן עד ' + esc(MH.date(mm.deliveryLatest)) + ' (ארכת שינויי דיירים)' + (c.deliveryExtensionNote ? ' — ' + esc(c.deliveryExtensionNote) : '') + '.</li>' : '')
       + '<li>ריבית פיגורים ' + esc(c.lateInterestPct != null ? c.lateInterestPct : 11) + '% לשנה — אין ריבית על איחור עד 7 ימים (תוספת משפטית).</li>'
       + '<li>ליקויים בפרוטוקול המסירה יתוקנו תוך 13 חודשים.</li>'
       + '<li>הקונה משלם פיקדונות למוני גז, חשמל ומים.</li>'
@@ -364,7 +574,10 @@ details.py-det[open]>summary{margin-bottom:10px}
     h += '<div class="mh-card py-loan ' + loan.state + '"><div class="mh-card-title">⏳ הלוואת קבלן — ' + esc(loan.bank) + '<small>' + money(loan.amount) + '</small></div>'
       + '<div class="py-cd"><b>' + (loan.days < 0 ? 'עבר המועד' : loan.md.m) + '</b>' + (loan.days < 0 ? '' : '<span>חודשים ו-' + loan.md.d + ' ימים</span>') + '</div>'
       + '<div class="mh-sub">עד <b>' + esc(MH.date(loan.end)) + '</b> (' + loan.maxMonths + ' חודשים מ-' + esc(MH.date(loan.startDate)) + ') · ' + Math.max(0, loan.days).toLocaleString('he-IL') + ' ימים</div>'
-      + '<div class="mh-note" style="margin-top:8px">החברה משלמת את הריבית וההצמדה עד תום 30 חודשים — המשכנתא צריכה להחליף את ההלוואה לפני המועד הזה.</div></div>';
+      + '<div class="mh-note" style="margin-top:8px">החברה משלמת את הריבית וההצמדה עד תום 30 חודשים — המשכנתא צריכה להחליף את ההלוואה לפני המועד הזה.</div>'
+      + (mm.deliveryLatest && mm.deliveryLatest > loan.end ? '<div class="py-warn">⚠️ ההלוואה מסתיימת ב-' + esc(MH.date(loan.end)) + ', והמסירה עשויה להידחות עד ' + esc(MH.date(mm.deliveryLatest))
+        + ' — פער של כ-' + Math.max(1, Math.round((new Date(mm.deliveryLatest) - new Date(loan.end)) / 864e5 / 30.4)) + ' חודשים שבהם הסבסוד עלול להסתיים לפני המשכנתא. לברר מול בנק הפועלים/הקבלן.</div>' : '')
+      + '</div>';
 
     // financing need
     h += '<div class="mh-card"><div class="mh-card-title">💰 צורך מימון במסירה<button class="mh-btn sm ghost" data-act="edit-target">יעד משכנתא</button></div>'
@@ -372,6 +585,7 @@ details.py-det[open]>summary{margin-bottom:10px}
       + '<tr><td>יתרה לקבלן</td><td>' + money(mm.remaining) + '</td></tr>'
       + '<tr><td>הפרשי הצמדה <span class="mh-sub">(' + fin.ixSrc + ')</span></td><td>' + money(fin.ix) + '</td></tr>'
       + '<tr><td>פירעון הלוואת קבלן</td><td>' + money(fin.loanAmt) + '</td></tr>'
+      + (fin.extras ? '<tr><td>תשלומים נוספים <span class="mh-sub">(שינויי דיירים + הצמדה)</span></td><td>' + money(fin.extras) + '</td></tr>' : '')
       + '<tr class="tot"><td>סה"כ נדרש במסירה</td><td>' + money(fin.total) + '</td></tr>'
       + '<tr><td>הון עצמי זמין (הגדרות)</td><td>−' + money(fin.cash) + '</td></tr>'
       + '<tr class="res"><td>משכנתא משוערת</td><td>' + money(fin.est) + '</td></tr>'
@@ -453,18 +667,60 @@ details.py-det[open]>summary{margin-bottom:10px}
       } } : null,
     });
   }
-  function indexSheet() {
-    const c = C || {};
+  function ixRowSheet(key) {
+    if (!C) return;
+    const mm = model(), ix = mm.ix;
+    const r = key ? ix.rows.find(x => x._key === key) : null;
+    // new row: default to the latest contractor payment that has no index row yet
+    const used = new Set(ix.rows.map(x => x.paymentKey).filter(Boolean));
+    const cand = r ? null : mm.pays.filter(p => !used.has(p._key)).pop();
+    const d = r || (cand ? { payDate: cand.date, amount: cand.amount, paymentKey: cand._key, notes: cand.invoiceNo ? 'חשבונית ' + cand.invoiceNo : '' } : { payDate: MH.todayISO() });
+    const im = d.indexMonth || (r ? '' : prevMonthKey(d.payDate));
+    const iv = d.indexValue != null ? d.indexValue : (!r && ix.userOf(im) != null ? Math.round(ix.userOf(im) * 1000) / 1000 : '');
     MH.sheet({
-      title: '📈 מדד תשומות הבנייה',
-      html: '<div class="form-group"><label>מדד בסיס ' + esc(c.baseIndexLabel || '02/2025') + '</label><input type="number" step="any" name="baseIndex" value="' + esc(c.baseIndex != null ? c.baseIndex : '') + '" placeholder="למשל 136.2"></div>'
-        + '<div class="form-row-2"><div class="form-group"><label>מדד נוכחי</label><input type="number" step="any" name="currentIndex" value="' + esc(c.currentIndex != null ? c.currentIndex : '') + '"></div>'
-        + '<div class="form-group"><label>חודש המדד</label><input type="text" name="currentIndexLabel" placeholder="MM/YYYY" value="' + esc(c.currentIndexLabel || '') + '"></div></div>'
-        + '<div class="mh-note">המדד מתפרסם ב-15 לכל חודש באתר הלמ"ס (מדד מחירי תשומה בבנייה למגורים). השתמשו באותו בסיס מדד בשני השדות.</div>',
+      title: r ? '✏️ שורת הצמדה' : '＋ שורת הצמדה',
+      html: '<div class="form-row-2"><div class="form-group"><label>תאריך תשלום *</label><input type="date" name="payDate" value="' + esc(d.payDate || '') + '"></div>'
+        + '<div class="form-group"><label>סכום ₪ *</label><input type="number" name="amount" value="' + esc(d.amount != null ? d.amount : '') + '"></div></div>'
+        + '<div class="form-group"><label>תשלום מקושר</label><select name="paymentKey"><option value="">—</option>' + mm.pays.map(p => '<option value="' + esc(p._key) + '"' + (p._key === d.paymentKey ? ' selected' : '') + '>' + esc(MH.date(p.date)) + ' · ' + money(p.amount) + '</option>').join('') + '</select></div>'
+        + '<div class="form-row-2"><div class="form-group"><label>חודש מדד (YYYY-MM)</label><input type="text" name="indexMonth" placeholder="ריק = לפני ההצמדה" value="' + esc(im) + '"></div>'
+        + '<div class="form-group"><label>מדד (נקודות שלך)</label><input type="number" step="any" name="indexValue" value="' + esc(iv) + '"></div></div>'
+        + '<div class="form-group"><label>סכום חשוף אחרי התשלום (ריק = חישוב אוטומטי)</label><input type="number" name="exposedAfter" value="' + esc(d.exposedAfter != null ? d.exposedAfter : '') + '"></div>'
+        + '<div class="form-group"><label>הערות</label><input type="text" name="notes" value="' + esc(d.notes || '') + '"></div>'
+        + '<div class="mh-note">חודש המדד = החודש שלפני התשלום. הפרשי ההצמדה מחושבים אוטומטית מסדרת הלמ"ס.</div>',
       onSave: el => {
         const v = MH.formValues(el);
-        return upd('contract', { baseIndex: v.baseIndex, currentIndex: v.currentIndex, currentIndexLabel: v.currentIndexLabel || null });
+        if (!v.payDate || !(v.amount > 0)) { MH.toast('יש להזין תאריך וסכום'); return false; }
+        if (v.indexMonth && !/^\d{4}-\d{2}$/.test(v.indexMonth)) { MH.toast('חודש מדד בפורמט YYYY-MM'); return false; }
+        const obj = { payDate: v.payDate, amount: v.amount, paymentKey: v.paymentKey || '', indexMonth: v.indexMonth || null, indexValue: v.indexValue, exposedAfter: v.exposedAfter, notes: v.notes || '' };
+        if (r) return MH.keyed.update('contract/indexRows/' + r._key, obj);
+        Object.keys(obj).forEach(k => { if (obj[k] === null) delete obj[k]; });
+        return MH.keyed.add('contract/indexRows', obj);
       },
+      danger: r ? { label: '🗑️ מחק שורה', onClick: async () => (await MH.confirm('למחוק את שורת ההצמדה מ-' + MH.date(r.payDate) + '?')) ? MH.keyed.remove('contract/indexRows/' + r._key) : false } : null,
+    });
+  }
+  function extraSheet(key) {
+    if (!C) return;
+    const x = key ? entries(C.extras).find(e => e._key === key) : null;
+    const d = x || { date: MH.todayISO(), linked: true, financedByMortgage: true, dueAt: 'delivery', indexBaseMonth: prevMonthKey(MH.todayISO()) };
+    MH.sheet({
+      title: x ? '✏️ תשלום נוסף' : '＋ תשלום נוסף לקבלן',
+      html: '<div class="form-group"><label>תיאור *</label><input type="text" name="title" value="' + esc(d.title || '') + '"></div>'
+        + '<div class="form-row-2"><div class="form-group"><label>סכום ₪ (כולל מע"מ) *</label><input type="number" step="any" name="amount" value="' + esc(d.amount != null ? d.amount : '') + '"></div>'
+        + '<div class="form-group"><label>תאריך</label><input type="date" name="date" value="' + esc(d.date || '') + '"></div></div>'
+        + '<div class="form-row-2"><div class="form-group"><label>מועד תשלום</label><input type="text" name="dueAt" placeholder="delivery או YYYY-MM-DD" value="' + esc(d.dueAt || '') + '"></div>'
+        + '<div class="form-group"><label>מדד בסיס (YYYY-MM)</label><input type="text" name="indexBaseMonth" value="' + esc(d.indexBaseMonth || '') + '"></div></div>'
+        + '<div class="form-group"><label><input type="checkbox" name="linked"' + (d.linked ? ' checked' : '') + '> צמוד למדד תשומות הבנייה</label></div>'
+        + '<div class="form-group"><label><input type="checkbox" name="financedByMortgage"' + (d.financedByMortgage ? ' checked' : '') + '> ימומן במשכנתא</label></div>'
+        + '<div class="form-group"><label><input type="checkbox" name="paid"' + (d.paid ? ' checked' : '') + '> שולם</label></div>'
+        + '<div class="form-group"><label>הערות</label><textarea name="notes">' + esc(d.notes || '') + '</textarea></div>',
+      onSave: el => {
+        const v = MH.formValues(el);
+        if (!v.title || !(v.amount > 0)) { MH.toast('יש להזין תיאור וסכום'); return false; }
+        const obj = { title: v.title, amount: v.amount, date: v.date || '', dueAt: v.dueAt || '', indexBaseMonth: v.indexBaseMonth || '', linked: v.linked, financedByMortgage: v.financedByMortgage, paid: v.paid, notes: v.notes || '' };
+        return x ? MH.keyed.update('contract/extras/' + x._key, obj) : MH.keyed.add('contract/extras', obj);
+      },
+      danger: x ? { label: '🗑️ מחק', onClick: async () => (await MH.confirm('למחוק את "' + x.title + '"?')) ? MH.keyed.remove('contract/extras/' + x._key) : false } : null,
     });
   }
   function targetSheet() {
@@ -533,7 +789,13 @@ details.py-det[open]>summary{margin-bottom:10px}
       if (a === 'add-pay') { if (C) paySheet(null); }
       else if (a === 'edit-pay') { if (e.target.closest('.py-doc')) return; paySheet(k); }
       else if (a === 'open-doc') { e.stopPropagation(); try { const D = window.DOCS_API; if (D && D.openEditor) D.openEditor(k); else if (D && D.open) D.open(k); else if (typeof switchPage === 'function') switchPage('docs'); } catch (er) {} }
-      else if (a === 'edit-index') indexSheet();
+      else if (a === 'refresh-index') { if (!ui.fetching) refreshIndex({ force: true }).then(r => MH.toast(r === 'updated' ? '📈 המדד עודכן מהלמ"ס' : r === 'current' ? '✓ המדד מעודכן' : '⚠️ עדכון המדד נכשל — מוצג מדד שמור')); }
+      else if (a === 'edit-ixrow') ixRowSheet(k);
+      else if (a === 'add-ixrow') ixRowSheet(null);
+      else if (a === 'ix-paid') { if (C) setv('contract/indexDiffPaid', !!b.checked); }
+      else if (a === 'edit-extra') extraSheet(k);
+      else if (a === 'add-extra') extraSheet(null);
+      else if (a === 'extra-paid') { const x = entries(C && C.extras).find(e => e._key === k); if (x) MH.keyed.update('contract/extras/' + k, { paid: !x.paid }); }
       else if (a === 'edit-target') targetSheet();
       else if (a === 'edit-mort') mortSheet();
       else if (a === 'stage') { const s = STAGES[Number(b.dataset.i)]; if (s && M && M.stage !== s) setv('mortgage/stage', s); }
@@ -555,7 +817,21 @@ details.py-det[open]>summary{margin-bottom:10px}
       price: mm.price, paid: mm.paid, remaining: mm.remaining, pct: Math.round(mm.pct * 10) / 10,
       nextInstallment: n ? { label: n.label, amount: n.amount, dueDate: n.dueDate, remaining: n._rem, days: n._days } : null,
       deliveryDate: mm.c.deliveryDate || null, daysToDelivery: MH.daysUntil(mm.c.deliveryDate),
-      indexEstimate: mm.indexEstimate,
+      deliveryLatest: mm.deliveryLatest, daysToDeliveryLatest: MH.daysUntil(mm.deliveryLatest),
+      indexEstimate: mm.indexEstimate,        // accrued now (past rows + since last payment), minus past if indexDiffPaid
+      indexProjection: mm.indexProjection,    // projected index cost still to pay at the final payment
+      indexRisePct: mm.ix.baseMonth && mm.ix.chain(mm.ix.latestMonth) ? (mm.ix.chain(mm.ix.latestMonth) / mm.ix.chain(mm.ix.baseMonth) - 1) * 100 : null,
+      index: {
+        latestMonth: mm.ix.latestMonth, latestValueUser: mm.ix.latestValueUser, latestValueCbs: mm.ix.latestValueCbs,
+        avgMonthlyPct: mm.ix.avgMonthly * 100, avgAnnualPct: mm.ix.avgAnnual * 100,
+        accruedPast: mm.ix.accruedPast, accruedCurrent: mm.ix.accruedCurrent, accruedTotal: mm.ix.accruedTotal, paidPast: mm.ix.paidPast,
+        exposed: mm.ix.exposed, baseMonth: mm.ix.baseMonth, projectionMonth: mm.ix.projMonth, projectionMonthLate: mm.ix.lateMonth,
+        projectedIndex: mm.ix.projIndexUser, projectedIndexCbs: mm.ix.projIndexCbs, projectedTotal: mm.ix.projectedTotal, projectedTotalLate: mm.ix.projectedTotalLate,
+        updatedAt: mm.ix.updatedAt, source: mm.ix.source, stale: mm.ix.stale, fetchFailed: !!ui.fetchFailed,
+      },
+      extras: mm.extras.map(x => ({ key: x._key, title: x.title, amount: num(x.amount) || 0, indexProjected: x._ixProj, financedByMortgage: !!x.financedByMortgage, paid: !!x.paid, dueAt: x.dueAt || null })),
+      extrasFinancedTotal: fin.extras,
+      mortgageCategories: fin.extrasList.length ? ['שינוי דיירים'] : [],
       loanEnd: loan.end, loanDaysLeft: loan.days,
       mortgageStage: (M && M.stage) || STAGES[0], mortgageStageIndex: Math.max(0, si),
       checklistDone: ck.filter(x => x.done).length, checklistTotal: ck.length,
@@ -575,12 +851,16 @@ details.py-det[open]>summary{margin-bottom:10px}
     if (l.days != null && l.days <= lim && l.days >= -30) out.push({ date: l.end, title: 'סיום הלוואת קבלן — המשכנתא צריכה להחליף אותה', amount: Number(l.amount) || 0, kind: 'loan' });
     return out.sort((a, b) => a.date.localeCompare(b.date));
   }
-  window.PAY_API = { summary, upcoming, seed, STAGES: STAGES.slice() };
+  window.PAY_API = { summary, upcoming, seed, refreshIndex, STAGES: STAGES.slice(), _parseCbs: parseCbs };
 
   // ── subscriptions ──
   MH.db.ref('contract').on('value', snap => {
     C = snap.val(); cLoaded = true;
     if (C === null) seed();
+    else {
+      seedContractExtras();
+      if (!ui.autoTried) { ui.autoTried = true; setTimeout(() => refreshIndex(), 0); }
+    }
     MH.emit('contract'); MH.refreshIfShown('payments');
   });
   MH.db.ref('mortgage').on('value', snap => {

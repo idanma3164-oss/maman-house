@@ -6,6 +6,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>🏠 הבית החדש — משפחת ממן</title>
 <meta name="theme-color" content="#1a1a2e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-title" content="הבית החדש">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="mobile-web-app-capable" content="yes">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -218,7 +224,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--ink);paddin
 .savings-input:focus{outline:none;border-color:#3b82f6}
 .months-badge{background:#eff6ff;color:#3b82f6;border-radius:8px;padding:3px 8px;font-size:.72rem;font-weight:600}
 </style>
-<link rel="stylesheet" href="css/app.css?v=2.1.1">
+<link rel="stylesheet" href="css/app.css?v=2.3.0">
 </head>
 <body>
 
@@ -263,7 +269,6 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--ink);paddin
   <div id="loadingScreen" class="loading"><div class="spinner"></div><div>מתחבר...</div></div>
   <div id="appContent" style="display:none">
     <div class="dash-grid" id="dashboard"></div>
-  <div class="savings-widget" id="savings-widget"></div>
     <div class="grand-bar" id="grandTotal"></div>
 
     <div class="filter-bar">
@@ -327,9 +332,8 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--ink);paddin
     <button onclick="testFirebaseConnection()" style="margin-top:10px;width:100%;padding:10px;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:.82rem;cursor:pointer;font-weight:600">🔍 בדוק חיבור Firebase</button>
     <div id="firebase-test-result" style="margin-top:8px;font-size:.8rem;color:var(--muted);text-align:center"></div>
     <div style="margin-top:8px;font-size:.75rem;color:var(--muted);line-height:1.6;padding:8px;background:var(--bg);border-radius:8px">
-      ⚠️ אם אין שמירה — Firebase Rules אולי פגו.<br>
-      עבור ל-Firebase → Realtime Database → Rules<br>
-      ושנה ל: <code style="font-size:.72rem">.read: true, .write: true</code>
+      🔒 הנתונים מוגנים: רק עידן ושני (מחוברים עם Google) יכולים לקרוא ולכתוב.<br>
+      אם יש שגיאת שמירה — התנתקו והתחברו מחדש. <b>אין לשנות את ה-Rules ב-Firebase לפתוחים.</b>
     </div>
   </div>
 </div>
@@ -431,6 +435,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--ink);paddin
     </div>
   </div>
   <div class="form-group"><label>הערות</label><textarea id="af-notes" placeholder="אופציונלי..."></textarea></div>
+  <div class="form-group"><label>📅 תאריך תשלום (בפועל או מתוכנן)</label><input type="date" id="af-date"><div style="font-size:.68rem;color:var(--muted);margin-top:4px">משמש לתחזית התזרים. תשלום חדש בלי תאריך יירשם עם תאריך היום.</div></div>
   <div class="form-group"><label>🔗 קישור מסמך / קבלה</label><input type="url" id="af-link" placeholder="הדבק קישור מ-Google Drive..."></div>
   <button class="btn-save" id="itemSaveBtn" onclick="saveItem()">שמור פריט</button>
   <button class="btn-cancel" onclick="closeItemSheet()">ביטול</button>
@@ -594,7 +599,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--ink);paddin
 <div class="toast" id="toast"></div>
 
 
-<script src="js/config.js?v=2.1.1"></script>
-<script src="js/boot.js?v=2.1.1"></script>
+<script src="js/config.js?v=2.3.0"></script>
+<script src="js/boot.js?v=2.3.0"></script>
 </body>
 </html>

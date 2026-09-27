@@ -229,9 +229,10 @@ function openItemSheet(idx) {
     document.getElementById('af-done').value = it.done ? '1' : '0';
     document.getElementById('af-notes').value = it.notes || '';
     document.getElementById('af-link').value = it.link || '';
+    document.getElementById('af-date').value = it.payDate || '';
     document.getElementById('af-qty').value = it.qty || 1;
   } else {
-    ['af-desc','af-price','af-paid','af-notes','af-link'].forEach(id => document.getElementById(id).value = '');
+    ['af-desc','af-price','af-paid','af-notes','af-link','af-date'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('af-qty').value = '1';
     document.getElementById('af-phase').value = '3';
     document.getElementById('af-done').value = '0';
@@ -259,7 +260,10 @@ function saveItem() {
   const notes = document.getElementById('af-notes').value.trim();
   const link = document.getElementById('af-link').value.trim();
   const qty = parseInt(document.getElementById('af-qty').value) || 1;
-  const item = { desc, price, paid, qty, cat, phase, notes, link, done };
+  let payDate = document.getElementById('af-date').value || '';
+  if (!payDate && paid > ((editingSnap && Number(editingSnap.paid)) || 0)) payDate = MH.todayISO();   // תשלום חדש בלי תאריך → היום
+  const item = { desc, price, paid, qty, cat, phase, notes, link, done, payDate: payDate || null };
+  if (!editingSnap && !payDate) delete item.payDate;
   if (editingSnap && editingSnap.qty == null && qty === 1) delete item.qty;   // אל תוסיף שדות שלא השתנו
   if (editingSnap && price === null) delete item.price;
   if (editingIdx !== null && editingSnap) {
@@ -411,7 +415,7 @@ function renderCategories(filtered) {
         MH.arrSet(refData, idx, DATA[idx]);
       });
       const info = document.createElement('div'); info.className = 'item-info';
-      const ph = document.createElement('div'); ph.className = 'item-phase'; ph.textContent = 'שלב ' + (it.phase||'?');
+      const ph = document.createElement('div'); ph.className = 'item-phase'; ph.textContent = 'שלב ' + (it.phase||'?') + (it.payDate ? ' · 📅 ' + MH.date(it.payDate) : '');
       const nm = document.createElement('div'); nm.className = 'item-name' + (it.done ? ' done' : ''); nm.textContent = it.desc;
       info.appendChild(ph); info.appendChild(nm);
       const amounts = document.createElement('div'); amounts.className = 'item-amounts';
@@ -1094,9 +1098,11 @@ function _calcSavings(available, moveInStr) {
   const today = new Date(); today.setHours(0,0,0,0);
   const msPerMonth = 1000 * 60 * 60 * 24 * 30.44;
   const monthsLeft = Math.max(0, Math.ceil((MOVE_IN - today) / msPerMonth));
-  const totalRem    = DATA.reduce((s,i)=>s+(i.price||0),0) - DATA.reduce((s,i)=>s+(i.paid||0),0);
-  const totalRemNo4 = DATA.filter(i=>i.phase!==4).reduce((s,i)=>s+(i.price||0),0)
-                    - DATA.filter(i=>i.phase!==4).reduce((s,i)=>s+(i.paid||0),0);
+  const _mc = (window.PAY_API && PAY_API.summary && (PAY_API.summary().mortgageCategories || [])) || [];
+  const _D = DATA.filter(i => i && !_mc.includes(i.cat));
+  const totalRem    = _D.reduce((s,i)=>s+(i.price||0),0) - _D.reduce((s,i)=>s+(i.paid||0),0);
+  const totalRemNo4 = _D.filter(i=>i.phase!==4).reduce((s,i)=>s+(i.price||0),0)
+                    - _D.filter(i=>i.phase!==4).reduce((s,i)=>s+(i.paid||0),0);
   const stillNeeded    = Math.max(0, totalRem    - available);
   const stillNeededNo4 = Math.max(0, totalRemNo4 - available);
   return {
@@ -1276,7 +1282,7 @@ refSettings.on('value', snap => {
     SETTINGS = Object.assign({ available: 0, moveInDate: '2027-08-01' }, val);
   }
   const widget = document.getElementById('savings-widget');
-  if (!widget) return;
+  if (!widget) { MH.emit('settings'); return; }
   const elAvail = document.getElementById('savings-available');
   if (!elAvail) {
     // Widget לא נבנה עדיין — בנה אותו

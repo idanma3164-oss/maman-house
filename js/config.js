@@ -20,4 +20,4 @@ window.ALLOWED_USERS = {
   "shanis4020@gmail.com": "שני",
 };
 
-window.APP_VERSION = "2.1.1";
+window.APP_VERSION = "2.3.0";

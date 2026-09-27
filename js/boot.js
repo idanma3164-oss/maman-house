@@ -233,12 +233,13 @@
       a.download = 'maman_house_backup_' + MH.todayISO() + '.json';
       document.body.appendChild(a); a.click(); a.remove();
       MH.toast('📥 הגיבוי ירד למכשיר');
+      db.ref('meta/lastBackup').set({ at: Date.now(), by: MH.me || '' }).catch(() => {});
     }).catch(e => MH.toast('❌ ' + e.message));
   };
   window.MH = MH;
 
   // ── טעינת קבצי האפליקציה לפי הסדר ──────────────────────────────
-  const APP_SCRIPTS = ['js/legacy.js', 'js/tasks-plus.js', 'js/docs.js', 'js/payments.js', 'js/dashboard.js'];
+  const APP_SCRIPTS = ['js/legacy.js', 'js/tasks-plus.js', 'js/docs.js', 'js/payments.js', 'js/cashflow.js', 'js/dashboard.js', 'js/migrations.js'];
   function loadScripts(list, done) {
     if (!list.length) return done();
     const s = document.createElement('script');
@@ -256,6 +257,8 @@
     const so = document.getElementById('signOutBtn'); if (so && MH.user) so.style.display = '';
     // עותק "נקי" של המערכים הישנים + מיגרציית מזהים קבועים (חד-פעמית, בטרנזקציה)
     ['expenses', 'tasks', 'kitchen'].forEach(p => { MH.track(p); MH.ensureIds(p); });
+    // ניקוי חד-פעמי של צמתי בדיקה ישנים (לא נתונים של המשתמשים)
+    ['_listen_test', '_test_connection'].forEach(p => db.ref(p).remove().catch(() => {}));
     loadScripts(APP_SCRIPTS, () => {
       MH.emit('ready');
       const h = (location.hash || '').slice(1);

@@ -121,6 +121,11 @@
           title: S.loanDaysLeft < 0 ? 'הלוואת הקבלן הסתיימה' : 'הלוואת הקבלן מסתיימת ' + rel(S.loanDaysLeft),
           sub: 'עד ' + MH.date(S.loanEnd) + ' המשכנתא צריכה להחליף את ההלוואה (₪700K) — אחרת הריבית עוברת אליכם' });
       }
+      if (S.deliveryLatest && S.loanEnd && S.deliveryLatest > S.loanEnd && S.loanDaysLeft !== null && S.loanDaysLeft >= 0) {
+        const gap = Math.round((new Date(S.deliveryLatest) - new Date(S.loanEnd)) / 864e5);
+        out.push({ sev: 'yellow', icon: '📆', go: 'payments', title: 'פער אפשרי בין סיום הלוואת הקבלן למסירה',
+          sub: 'ההלוואה מסתיימת ' + MH.date(S.loanEnd) + ', והמסירה עשויה להידחות עד ' + MH.date(S.deliveryLatest) + ' (כ-' + gap + ' ימים) — לברר מול בנק הפועלים/הקבלן' });
+      }
       if (S.mortgageStageIndex === 0 && S.loanDaysLeft !== null && S.loanDaysLeft < 456) {
         out.push({ sev: 'yellow', icon: '🏦', go: 'payments', title: 'תהליך המשכנתא טרם התחיל',
           sub: 'הלוואת הקבלן מסתיימת ' + MH.date(S.loanEnd) + ' (' + rel(S.loanDaysLeft) + ') — כדאי להתחיל באיסוף מסמכים' });
@@ -138,6 +143,14 @@
     }
     if (E.toPrice) {
       out.push({ sev: 'blue', icon: '🏷️', go: 'home', title: E.toPrice + ' פריטים ממתינים לעדכון מחיר', sub: 'מסומנים "לעדכן מחיר" ומחירם ₪0 — חסרים בתקציב' });
+    }
+    if (backup.loaded) {
+      const days = backup.at ? Math.floor((Date.now() - backup.at) / 864e5) : null;
+      if (days === null || days > 30) {
+        out.push({ sev: days === null || days > 60 ? 'yellow' : 'blue', icon: '💾', act: 'backup',
+          title: days === null ? 'עדיין לא נשמר גיבוי של הנתונים' : 'הגיבוי האחרון לפני ' + days + ' ימים',
+          sub: 'הקש כאן להורדת גיבוי מלא (JSON) למכשיר — מומלץ פעם בחודש' });
+      }
     }
     const rank = { red: 0, yellow: 1, blue: 2 };
     return out.sort((a, b) => rank[a.sev] - rank[b.sev]);
@@ -192,7 +205,7 @@
       + '<div class="ds-hero-main">'
       + '<button class="ds-count" data-go="payments" aria-label="' + days + ' ימים עד המסירה">'
       + '<span class="ds-count-n">' + (days == null ? '—' : Math.max(0, days)) + '</span>'
-      + '<span class="ds-count-l">ימים עד המסירה</span><span class="ds-count-d">🔑 ' + dt(S.deliveryDate) + (days > 60 ? ' · כ-' + monthsFromDays(days) + ' חודשים' : '') + '</span></button>'
+      + '<span class="ds-count-l">ימים עד המסירה</span><span class="ds-count-d">🔑 ' + dt(S.deliveryDate) + (days > 60 ? ' · כ-' + monthsFromDays(days) + ' חודשים' : '') + '</span>' + (S.deliveryLatest ? '<span class="ds-count-d">ייתכן עד ' + dt(S.deliveryLatest) + '</span>' : '') + '</button>'
       + '<button class="ds-paid" data-go="payments">'
       + '<span class="ds-paid-row"><span class="ds-paid-l">שולם לקבלן</span><span class="ds-paid-p">' + pct1(S.paid, S.price) + '</span></span>'
       + '<span class="ds-hbar" role="img" aria-label="שולם ' + esc(money(S.paid)) + ' מתוך ' + esc(money(S.price)) + ' (' + pct1(S.paid, S.price) + ')"><i style="width:' + p.toFixed(1) + '%"></i></span>'
@@ -212,7 +225,7 @@
       h += tile('payments', 'שולם לקבלן', moneyK(S.paid), pct1(S.paid, S.price) + ' ממחיר הדירה', meter(pct(S.paid, S.price), 'שולם ' + pct1(S.paid, S.price)), 'שולם לקבלן ' + money(S.paid));
       const ixAuto = S.indexEstimate != null;
       const ix = ixAuto ? S.indexEstimate : (data().find(x => String(x.desc || '').includes('מדד')) || {}).price;
-      h += tile('payments', 'יתרה לקבלן', moneyK(S.remaining), ix ? (ixAuto ? '+ הצמדה ' : '+ הערכת הצמדה ') + '<bdi>' + moneyK(ix) + '</bdi>' : '+ הפרשי הצמדה', '', 'יתרה לקבלן ' + money(S.remaining));
+      h += tile('payments', 'יתרה לקבלן', moneyK(S.remaining), ix ? (ixAuto ? '+ הצמדה עד היום ' : '+ הערכת הצמדה ') + '<bdi>' + moneyK(ix) + '</bdi>' : '+ הפרשי הצמדה', '', 'יתרה לקבלן ' + money(S.remaining));
     } else {
       h += tile('payments', 'שולם לקבלן', ph, '', '', 'שולם לקבלן') + tile('payments', 'יתרה לקבלן', ph, '', '', 'יתרה לקבלן');
     }
@@ -232,7 +245,7 @@
     const A = M.alerts;
     if (!A.length) return '';
     const shown = ui.allAlerts ? A : A.slice(0, ALERT_CAP);
-    const rows = shown.map(a => '<button class="ds-alert ds-sev-' + a.sev + '" data-go="' + esc(a.go) + '">'
+    const rows = shown.map(a => '<button class="ds-alert ds-sev-' + a.sev + '" ' + (a.act === 'backup' ? 'data-backup="1"' : 'data-go="' + esc(a.go) + '"') + '>'
       + '<span class="ds-al-ic" aria-hidden="true">' + esc(a.icon) + '</span>'
       + '<span class="mh-grow"><span class="ds-al-t">' + esc(a.title) + '</span><span class="ds-al-s">' + esc(a.sub) + '</span></span>'
       + '<span class="ds-al-tag">' + SEV[a.sev].icon + ' ' + SEV[a.sev].lbl + '</span></button>').join('');
@@ -346,11 +359,13 @@
       + '</section>';
   }
 
+  function secCashflow() { return window.CASHFLOW_API ? window.CASHFLOW_API.section() : ''; }
+
   function secSavings(M) {
     const E = M.E;
     if (!E.loaded) return '';
     const sv = E.savings;
-    return '<section class="mh-card ds-tap" data-sec="savings" data-go="home" role="button" tabindex="0"><div class="mh-card-title"><span>💰 קצב חיסכון</span><small>עד אכלוס ' + dt(E.moveIn) + '</small></div>'
+    return '<section class="mh-card ds-tap" data-sec="savings" data-edit="savings" role="button" tabindex="0"><div class="mh-card-title"><span>💰 קצב חיסכון</span><small>עד אכלוס ' + dt(E.moveIn) + ' · ✏️ עדכון</small></div>'
       + '<div class="ds-sv">'
       + '<div><span>נותר לשלם</span><b>' + moneyK(E.remaining) + '</b></div>'
       + '<div><span>זמין עכשיו</span><b>' + moneyK(E.avail) + '</b></div>'
@@ -373,7 +388,8 @@
 
   function secFooter() {
     const d = new Date(); const t = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-    return '<footer class="ds-foot" data-sec="footer"><span>עודכן ' + t + '</span><button class="ds-link" data-backup="1">📥 גיבוי</button></footer>';
+    const b = backup.at ? 'גיבוי אחרון ' + MH.date(new Date(backup.at).toISOString().slice(0, 10)) : 'לא נשמר גיבוי';
+    return '<footer class="ds-foot" data-sec="footer"><span>עודכן ' + t + ' · ' + esc(b) + '</span><button class="ds-link" data-backup="1">📥 גיבוי</button></footer>';
   }
 
   // ── render ──
@@ -385,7 +401,7 @@
     const M = model();
     lastRender = Date.now();
     root.innerHTML = '<div class="ds">'
-      + safe(secHero, M) + safe(secKpis, M) + safe(secAlerts, M) + safe(secTimeline, M) + safe(secBudget, M)
+      + safe(secHero, M) + safe(secKpis, M) + safe(secAlerts, M) + safe(secTimeline, M) + safe(secCashflow, M) + safe(secBudget, M)
       + '<div class="ds-grid">' + safe(secContractor, M) + safe(secMortgage, M) + '</div>'
       + '<div class="ds-grid">' + safe(secSavings, M) + safe(secPhases, M) + '</div>'
       + secFooter() + '</div>';
@@ -404,24 +420,42 @@
       if (card) card.scrollIntoView({ block: 'start' });
     }, 30);
   }
+  function savingsSheet() {
+    const s = settings();
+    MH.sheet({
+      title: '💰 תכנון חיסכון לאכלוס',
+      html: '<div class="form-group"><label>🏦 כסף זמין עכשיו (₪)</label><input type="number" inputmode="numeric" name="available" value="' + esc(s.available || '') + '"></div>'
+        + '<div class="form-group"><label>🏠 תאריך אכלוס מתוכנן</label><input type="date" name="moveInDate" value="' + esc(s.moveInDate || '') + '"></div>'
+        + '<div class="mh-note">החיסכון החודשי הנדרש = (יתרת ההוצאות הנלוות − הכסף הזמין) ÷ החודשים עד האכלוס. יתרת התשלום לקבלן ממומנת במשכנתא ולא נכללת כאן.</div>',
+      onSave: el => {
+        const v = MH.formValues(el);
+        if (!v.moveInDate) { MH.toast('⚠️ חסר תאריך אכלוס'); return false; }
+        MH.syncing();
+        return MH.db.ref('settings').update({ available: Number(v.available) || 0, moveInDate: v.moveInDate }).then(MH.saved, MH.saveError);
+      },
+    });
+  }
   let bound = null;
   function bind(root) {
     if (bound === root) return; bound = root;
     root.addEventListener('click', e => {
-      const t = e.target.closest('[data-owner],[data-toggle],[data-backup],[data-cat],[data-go]');
+      const t = e.target.closest('[data-owner],[data-toggle],[data-backup],[data-cat],[data-edit],[data-go]');
       if (!t || !root.contains(t)) return;
       if (t.dataset.owner) { ui.owner = t.dataset.owner; render(); return; }
       if (t.dataset.toggle === 'cats') { ui.allCats = !ui.allCats; render(); return; }
       if (t.dataset.toggle === 'alerts') { ui.allAlerts = !ui.allAlerts; render(); return; }
       if (t.dataset.backup) { if (MH.exportBackup) MH.exportBackup(); return; }
       if (t.dataset.cat) { openCategory(t.dataset.cat); return; }
+      if (t.dataset.edit === 'savings') { savingsSheet(); return; }
       if (t.dataset.go) go(t.dataset.go);
     });
     root.addEventListener('keydown', e => {
-      if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.ds-tap')) { e.preventDefault(); go(e.target.dataset.go); }
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.ds-tap')) { e.preventDefault(); if (e.target.dataset.edit === 'savings') savingsSheet(); else go(e.target.dataset.go); }
     });
   }
 
+  const backup = { loaded: false, at: null };
+  MH.db.ref('meta/lastBackup').on('value', sn => { const v = sn.val(); backup.loaded = true; backup.at = v && v.at ? Number(v.at) : null; schedule(); }, () => { backup.loaded = false; });
   let timer = null;
   function schedule() { clearTimeout(timer); timer = setTimeout(() => MH.refreshIfShown('dash'), 100); }
   ['expenses', 'tasks', 'settings', 'docs', 'contract', 'mortgage', 'ready'].forEach(ev => MH.on(ev, schedule));
