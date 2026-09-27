@@ -1,0 +1,58 @@
+/* ═══ app.css — רכיבים משותפים של v2 ═══ */
+:root{
+  --ink-2:#374151; --soft:#f8fafc; --blue-50:#eff6ff; --green-50:#ecfdf5; --red-50:#fef2f2; --yellow-50:#fffbeb;
+  --r:14px;
+}
+.bottom-nav .nav-btn{font-size:.6rem;padding:0 2px;text-align:center;line-height:1.15}
+.bottom-nav .nav-icon{font-size:1.2rem}
+.hdr-actions{display:flex;align-items:center;gap:6px}
+.hdr-stats{display:none}
+.hdr-chip{font-size:.7rem;background:var(--blue-50);color:var(--accent);padding:3px 8px;border-radius:12px;font-weight:700}
+.hdr-btn{background:var(--bg);border:1.5px solid var(--border);border-radius:10px;width:34px;height:34px;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.hdr-btn.active{border-color:var(--accent);background:var(--blue-50)}
+
+/* Login */
+.login-screen{position:fixed;inset:0;z-index:1000;background:linear-gradient(160deg,#1a1a2e,#2d3a6b);align-items:center;justify-content:center;padding:16px}
+.login-card{background:#fff;border-radius:20px;padding:32px 24px;width:100%;max-width:360px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.login-title{font-size:1.2rem;font-weight:900;margin-top:8px}
+.login-sub{font-size:.8rem;color:var(--muted);margin:4px 0 24px}
+.login-btn{width:100%;padding:13px;border-radius:12px;border:1.5px solid var(--border);background:#fff;font-family:inherit;font-size:.95rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px}
+.login-btn:active{background:var(--bg)}
+.g-logo{width:22px;height:22px;border-radius:50%;background:#4285f4;color:#fff;font-weight:900;font-size:.8rem;display:inline-flex;align-items:center;justify-content:center}
+.login-msg{margin-top:14px;font-size:.8rem;color:var(--red);min-height:1em}
+
+/* Shared building blocks for new modules */
+.mh-h1{font-size:1rem;font-weight:900;display:flex;align-items:center;justify-content:space-between;margin:2px 0 10px}
+.mh-card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:14px;margin-bottom:12px}
+.mh-card-title{font-size:.88rem;font-weight:800;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mh-card-title small{font-size:.7rem;color:var(--muted);font-weight:600}
+.mh-btn{padding:7px 12px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-family:inherit;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap}
+.mh-btn.ghost{background:var(--bg);color:var(--ink);border:1.5px solid var(--border)}
+.mh-btn.sm{padding:5px 9px;font-size:.72rem}
+.mh-badge{display:inline-block;font-size:.62rem;padding:2px 7px;border-radius:10px;font-weight:700;white-space:nowrap;background:#f3f4f6;color:var(--muted)}
+.mh-badge.red{background:#fee2e2;color:#b91c1c}.mh-badge.green{background:#dcfce7;color:#15803d}
+.mh-badge.yellow{background:#fef3c7;color:#92400e}.mh-badge.blue{background:#dbeafe;color:#1d4ed8}.mh-badge.purple{background:#ede9fe;color:#6d28d9}
+.mh-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--border)}
+.mh-row:first-child{border-top:none}
+.mh-grow{flex:1;min-width:0}
+.mh-title{font-size:.85rem;font-weight:700;line-height:1.3}
+.mh-sub{font-size:.7rem;color:var(--muted);margin-top:2px}
+.mh-meta{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+.mh-empty{text-align:center;color:var(--muted);font-size:.82rem;padding:18px 8px}
+.mh-kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.mh-kpi{background:var(--card);border-radius:var(--r);padding:12px 14px;box-shadow:var(--shadow)}
+.mh-kpi-val{font-size:1.15rem;font-weight:900;font-variant-numeric:tabular-nums}
+.mh-kpi-lbl{font-size:.68rem;color:var(--muted);margin-top:2px}
+.mh-kpi-sub{font-size:.66rem;color:var(--muted);margin-top:4px}
+.mh-meter{height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;margin-top:8px}
+.mh-meter>i{display:block;height:100%;background:var(--green);border-radius:4px}
+.mh-seg{display:flex;background:var(--bg);border-radius:10px;padding:3px;gap:3px;margin-bottom:10px;overflow-x:auto}
+.mh-seg button{flex:1;border:none;background:none;padding:7px 8px;border-radius:8px;font-family:inherit;font-size:.74rem;font-weight:700;color:var(--muted);cursor:pointer;white-space:nowrap}
+.mh-seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.mh-sheet-body .form-group input[type=checkbox]{width:auto}
+.mh-note{font-size:.72rem;color:var(--muted);line-height:1.6;background:var(--bg);border-radius:10px;padding:8px 10px}
+.mh-link{color:var(--accent);text-decoration:none;font-weight:700}
+@media (min-width:720px){
+  .page{max-width:760px;margin:0 auto}
+  .mh-kpis{grid-template-columns:repeat(4,1fr)}
+}
